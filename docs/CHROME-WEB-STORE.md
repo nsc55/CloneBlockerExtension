@@ -413,19 +413,31 @@ Tick these, and be prepared to explain each:
 
 | Category | Collected? | What, and why |
 |---|---|---|
-| Personally identifiable information | **Yes** | A pseudonym of the user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The ID is hashed in the browser (truncated SHA-256) before sending; the raw ID never leaves the machine, and the report store is readable only by the backend owner under Firestore security rules. |
+| Personally identifiable information | **Yes** | Two things. (1) The **browser identification string** (User-Agent) the browser sends with the report, stored on the report row and visible to the moderator — it distinguishes a report filed by the extension from one posted to the intake endpoint by a script, and alongside the stored IP address in the Location row it makes repeat reporters easier to recognise. No user setting declines it. (2) A pseudonym of the user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The ID is hashed in the browser (truncated SHA-256) before sending; the raw ID never leaves the machine, and the report store is readable only by the backend owner under Firestore security rules. |
 | User activity | **Yes** | The reports the user chooses to file: the reported account, the reason (one of seven tags), an optional note, optional links to posts. |
 | Website content | **Yes** | Only what the user attaches to a report — public post URLs and an optional short quote of the content they are reporting. If a moderator later opts the *reported* account in to the project's public page, those links and quotes can appear there; the user's note never does, and nothing identifying the reporter ever does. |
-| Location | **Yes, coarse** | Two things, and only ever attached to a report — never to a list fetch. (1) IANA time zone and BCP-47 language from the browser, sent only when **Send my time zone and language** is on. (2) A two-letter **country**, resolved at the network edge from the address the request came from; this one is server-side, so no user setting declines it. No geolocation API and no geo database, and the IP address itself is never stored — rate limiting keeps only a hash of it under an hourly-rotating salt, in a counter table that expires. Shows the reviewer where a reported clone is active; the ranking of which clones to block is computed locally in the user's browser and sends nothing. |
+| Location | **Yes** | Only ever attached to a report — never to a list fetch, which remains anonymous by construction. (1) IANA time zone and BCP-47 language from the browser, sent only when **Send my time zone and language** is on. (2) The **IP address** the report arrived from, stored on the report row, plus the **city** and two-letter **country** resolved from it at the network edge. All three are server-side properties of the connection, so no user setting declines them, and they are kept for as long as the report is. No geolocation API and no geo database is used — the city and country come from the CDN's own edge resolution. Shown to the moderator reviewing the report, and used to tell one reporter holding many pseudonyms from many reporters; the ranking of which clones to block is still computed locally in the user's browser and sends nothing. |
 | Authentication information | No | |
 | Financial / health / personal communications | No | |
 
-The country in the Location row is the one item here a user cannot switch off,
-because it is derived from the connection rather than sent by the browser. It
-is deliberately no finer than a country, it is never joined to an address, and
-the address it came from is not kept. Say so plainly if asked: a reviewer who
-finds a geolocation claim that the privacy policy does not match will be right
-to reject the listing, and the honest version is not a hard sell.
+The address, the city and the country in the Location row, and the browser
+identification string in the first row, are the items here a user cannot switch
+off, because they are properties of the request rather than something the
+extension chooses to send. **This changed on 23 August 2026**: the address used
+to be discarded after rate limiting, and the disclosure used to say the country
+was never joined to one. Both are now stored on the report and are visible to
+the moderator together. Say so plainly if asked — a reviewer who finds a
+geolocation claim the privacy policy does not match will be right to reject the
+listing, and the honest version is not a hard sell. The justification is that a
+pseudonym is free to remint, so nothing else in the report distinguishes one
+person filing under twenty of them from twenty people.
+
+**This row must be re-declared before the next submission, not after it.** The
+extension is being re-submitted anyway (the published build still points at a
+backend that no longer exists), so the disclosure change rides along with that
+submission rather than needing one of its own. Shipping the stored address
+under the previous "the address it came from is not kept" declaration would be
+a false disclosure, which is a listing takedown rather than a rejection.
 
 None of it is sold, rented, or used for anything but review. The one route by
 which any of it becomes public is the transparency page described under Single

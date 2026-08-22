@@ -509,11 +509,32 @@
       // for puts a count on the toolbar icon. Optimism without that channel
       // would just be a lie with better timing.
       const wantsBlock = box.checked;
+
+      // Resolve the identity again HERE, rather than trusting the one the
+      // sheet opened with.
+      //
+      // The block below already did this and the report did not, and that
+      // asymmetry was doing real damage. On Threads an id is only ever learned
+      // by a sweep that runs every fifteen seconds, and this sheet stays open
+      // for as long as it takes somebody to pick a reason and type a note. So
+      // the ordinary case was a sweep landing WHILE the dialog was up -- after
+      // which the block resolved an id and succeeded, and the report, still
+      // holding the null from the moment of the click, was filed against
+      // nothing and refused. The account went away and the report never
+      // arrived, which is exactly as baffling to the person as it sounds.
+      //
+      // The worker's username fallback means neither outcome loses a report
+      // any more. This is still worth doing: a report that carries the id
+      // aggregates with every other report of that account, where one carrying
+      // only the handle opens a second record the server then has to
+      // reconcile.
+      const fresh = enrich(ident);
+
       const payload = {
         platform: PLATFORM,
         viewerId: bridge.state.viewerId || null,
-        profileId: ident.profileId,
-        username: ident.username,
+        profileId: fresh.profileId,
+        username: fresh.username || ident.username,
         displayName: name,
         url,
         reason: sel.value,
@@ -553,11 +574,12 @@
       // because until it lands the account keeps appearing in front of them.
       void bridge.sw(P.SW.SUBMIT_REPORT, payload).catch(() => null);
       if (wantsBlock) {
-        // Resolve the id again rather than trusting the one captured when the
-        // sheet opened. On Threads it is learned from the page, and the sheet
-        // has been on screen for however long it took somebody to choose a
-        // reason and type a note.
-        const now = enrich(ident);
+        // The same resolution the report was just built from, deliberately
+        // reused rather than taken again. Two enrich() calls a few statements
+        // apart could disagree if a sweep landed between them, and a block
+        // aimed at one target while the report names another is the one
+        // outcome neither of them should be able to produce.
+        const now = fresh;
         // No id: the report still carries the username, and once that is on
         // the list the ordinary sweep blocks the profile the next time it is
         // seen. Nothing is lost, so nothing is claimed -- but the sheet has

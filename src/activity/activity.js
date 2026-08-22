@@ -231,10 +231,41 @@
 
   function chip(text, cls) { return el('span', 'pill ' + (cls || ''), text); }
 
-  function row(main, sub, chips) {
+  /**
+   * Where an account lives, from what this row knows about it.
+   *
+   * Facebook can always be addressed by id, which is the whole point of the id
+   * -- profile.php?id= resolves whatever the account is calling itself today.
+   * Threads has no such address: its URLs are handles, so without a username
+   * there is nowhere to send anybody and the row stays plain text rather than
+   * becoming a link that 404s.
+   */
+  function profileUrl(platform, id, username) {
+    const u = String(username || '').replace(/^@/, '').trim();
+    if (platform === 'threads') {
+      return u ? 'https://www.threads.com/@' + encodeURIComponent(u) : null;
+    }
+    if (/^\d{4,24}$/.test(String(id || ''))) {
+      return 'https://www.facebook.com/profile.php?id=' + encodeURIComponent(String(id));
+    }
+    return u ? 'https://www.facebook.com/' + encodeURIComponent(u) : null;
+  }
+
+  function row(main, sub, chips, href) {
     const r = el('div', 'arow');
     const left = el('div', 'aleft');
-    left.appendChild(el('div', 'amain', main));
+    // A link only where there is somewhere to go. noreferrer as well as
+    // noopener: this page knows which accounts somebody blocked, and the
+    // referrer would carry that page's address to Meta on every click.
+    if (href) {
+      const a = el('a', 'amain', main);
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noreferrer noopener';
+      left.appendChild(a);
+    } else {
+      left.appendChild(el('div', 'amain', main));
+    }
     if (sub) left.appendChild(el('div', 'asub', sub));
     r.appendChild(left);
     const right = el('div', 'aright');
@@ -452,7 +483,14 @@
         e.dryRun ? chip(T('activity_chipDryRun'), 'dry')
           : e.ok ? chip(T('activity_chipBlocked'), 'ok') : chip(T('activity_chipFailed'), 'bad'),
         chip(ago(e.at), 'time')
-      ]), host);
+      ],
+      // The username snapshotted at block time, falling back to whatever is
+      // known now -- a row for an account blocked before its name was learned
+      // should still become a link once it is.
+      profileUrl(e.platform, e.id,
+                 e.username ||
+                 ((state && state.idNames &&
+                   state.idNames[e.platform + ':' + e.id] || {}).u))), host);
   }
 
   // Mounted once, on the first render: the controls hold their own state, so

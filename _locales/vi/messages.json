@@ -1215,6 +1215,14 @@
     "message": "Da luu. Bao cao se duoc gui ngay khi ket noi duoc may chu.",
     "description": "Shown when a report could not be sent yet and was kept for retry."
   },
+  "sw_reportNoTarget": {
+    "message": "Không nhận ra tài khoản mà báo cáo này nhắm tới.",
+    "description": "Alert detail when a report cannot be sent because neither a profile id nor a username was resolved for the target."
+  },
+  "sw_reportRefused": {
+    "message": "Máy chủ không chấp nhận báo cáo này.",
+    "description": "Alert detail when a queued report has been refused enough times that retrying stopped."
+  },
   "sw_badSignature": {
     "message": "Khong the xac minh danh sach chan nen da bo qua.",
     "description": "A fetched blocklist carried a signature that did not verify, or a mirror served an unsigned one."

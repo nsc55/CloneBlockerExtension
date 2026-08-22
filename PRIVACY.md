@@ -1,6 +1,6 @@
 # Privacy policy — Clone Blocker
 
-*Last updated: 22 August 2026*
+*Last updated: 23 August 2026*
 
 *Also served, with a Vietnamese translation, at
 <https://cloneblocker.tree55.com/privacy>. This file is the policy of record;
@@ -77,19 +77,39 @@ which accounts to work through first is computed inside your browser, from
 metadata the file already carries — it never leaves the machine.
 
 **Your IP address, and what is done with it.** Any web server sees the address
-a request came from; that is how a reply gets back to you. This one does two
-things with it, and neither of them is stored.
+a request came from; that is how a reply gets back to you. **Fetching the
+blocklist** still does nothing with yours beyond answering: the file is static,
+the request carries no identifier, and nothing about that fetch is written down.
 
-- **Rate limiting.** The address is combined with a secret and a salt that
-  changes every hour, and only the resulting hash is kept, in a table of
-  counters that expires. Once the hour turns, that hash cannot be recomputed
-  from an address, so a copy of the counters cannot be checked against a list
-  of suspects. The address itself is never written down, and no report row has
-  a column that could hold one.
-- **A country.** The network in front of the server resolves the address to a
-  two-letter country code, which is attached to the report. It genuinely helps
-  somebody deciding whether an account is a clone to know where it is being
-  reported from.
+**Filing a report is different, and this has changed.** When you submit a
+report, the address it came from is **stored on that report**, along with the
+**city** the network in front of the server resolves it to and the two-letter
+country it already recorded. A moderator reviewing the report can see all
+three, and can see what else has been reported from the same address.
+
+- **Rate limiting is unchanged and still forgets.** For counting requests the
+  address is combined with a secret and a salt that changes every hour, and
+  only the resulting hash is kept, in a table of counters that expires. Once
+  the hour turns, that hash cannot be recomputed from an address, so a copy of
+  the counters cannot be checked against a list of suspects.
+- **The report itself does not forget.** It carries the address in full, and
+  the report has no expiry.
+- **A city and a country.** The network in front of the server resolves the
+  address to both, and both are attached to the report. They help somebody
+  deciding whether an account is a clone to know where it is being reported
+  from.
+
+**Why, and what it costs you.** The pseudonym a report is filed under is cheap
+to replace — reinstalling the extension mints a new one — so a queue that sees
+only pseudonyms cannot tell one person filing under twenty of them from twenty
+people, and the hourly salt above is specifically designed so that the counters
+cannot answer that question afterwards either. The address is what answers it.
+The cost is stated here rather than buried: **a copy of the report database now
+identifies the people who filed the reports.** The pseudonym was defence in
+depth behind that database; an address has nothing behind it. If that is not a
+trade you want to make, do not file reports — fetching the list and blocking
+from it still tell the server nothing about you at all, and that is the larger
+half of what the extension does.
 
 **This is a change, and it is worth being plain about it.** An earlier version
 of this document said the hosting provider's view of your address was joined to
@@ -143,6 +163,18 @@ Sent only when you deliberately submit a report, and only what is in the form:
 - the reason you selected;
 - any note you typed and any post links you attached, plus an optional short
   quote of the content you are reporting;
+- the **IP address** the report was sent from, and the **city** and **country**
+  the network in front of the server resolves it to. None of these three is
+  sent by the extension and no setting declines them — they are properties of
+  the connection itself. See *Your IP address, and what is done with it* above
+  for what they are for and what they cost;
+- the **browser identification string** your browser sends with every request
+  it makes to any website — the one naming your browser, its version and your
+  operating system. It is stored on the report and the moderator can see it. It
+  is there to tell a report filed by the extension from one posted to the
+  server by a script, which is what a flood looks like; combined with the
+  address it also makes two reports from the same person easier to recognise.
+  No setting declines it either;
 - your **time zone** (for example `Asia/Ho_Chi_Minh`) and **language** (for
   example `vi-VN`) — both values your browser already hands to every site you
   visit, used to show the reviewer where a clone is currently active. This is
@@ -206,12 +238,28 @@ one place where data handled by this project is visible to anyone at all, so it
 is worth reading carefully — particularly if you have found this policy because
 you believe you are on that page.
 
-**Nothing is published automatically.** Two separate decisions have to be made
-by a person, in this order: a moderator approves a report, which puts the
-account on the blocklist the extension applies; and the moderator then opts that
-specific account in to publication. Approving alone never names anyone. Most
-blocked accounts are never published, and the page shows both counts side by
-side so that is visible rather than claimed.
+**Nothing reaches that page automatically.** Two separate decisions have to be
+made by a person, in this order: a moderator approves a report, which puts the
+account on the blocklist the extension applies; and the moderator then opts
+that specific account in to publication. Most blocked accounts are never
+published there, and the page shows both counts side by side so that is
+visible rather than claimed.
+
+**The blocklist itself is a separate matter, and this changed.** The blocklist
+is the file every installation downloads, and anyone who requests it can read
+it — it has to be that way, because it is served from a CDN with no account
+behind it. It used to carry only numeric profile IDs, so being on it did not
+name you. It now also carries the **username and display name** of every
+account on it. The reason is mundane: without a name, somebody's own record of
+what they had blocked was a column of numbers they could not recognise. The
+consequence is not mundane, and is written here rather than left to be
+discovered: **an approved account is now named to anyone who fetches that
+file**, whether or not a moderator opted it in to the public page.
+
+What the opt-in still controls is the *page*: the tag, the report count, the
+dates, the regions and the evidence links are published only for accounts a
+person chose to publish. Approving an account puts its id and its name on the
+blocklist; it does not put the case against it in public.
 
 **What can be published about an opted-in profile:** its display name, its
 username, its numeric profile ID, its tag (clone, impersonation, scam,
@@ -253,6 +301,11 @@ cookies, session tokens, messages, contacts, payment information, device
 fingerprints, or anything at all from sites other than facebook.com,
 threads.net and threads.com.
 
+Note what is *not* in that list any more: the address a report was filed from,
+the city it resolves to, and the browser identification string it was sent
+with are all collected and kept. They are described under *Filing a report*
+and *Your IP address, and what is done with it*.
+
 ## Who else sees it
 
 The data is not sold, rented, or shared. Three parties can see some of it:
@@ -283,8 +336,12 @@ Retention is the backend owner's business, since the backend holds the data.
 Reports persist until an admin deletes them — from the moderation dashboard,
 or directly in the database,
 which the project owner can always do regardless of what any tooling offers.
-Account IDs exist in the store only as truncated hashes; the raw ID is never
-stored anywhere.
+There is no automatic expiry.
+
+**That now includes the address a report was filed from.** It is kept for as
+long as the report is, it is copied into every backup the server takes, and
+nothing deletes it on a schedule. Account IDs are still the exception and are
+still only ever truncated hashes; the raw account ID is never stored anywhere.
 
 A profile removed from the public list, or taken off the blocklist entirely,
 disappears from the page when the list is next published — the published

@@ -1344,6 +1344,14 @@ async function reset(settings) {
       // a doc_id, and a key that is not an operation name.
       docIdOverrides: { useBlockMutation: '7123456789012345', probe: 'x', 'bad key': '123456' },
       pending: ['threads:@maybe.clone'],
+      // Covers every listed id, including the ones no ranked target record
+      // was kept for. That is the whole point of it.
+      idNames: {
+        threads: {
+          '63082166531': { u: 'unranked.clone', d: 'Unranked Clone' },
+          '4100000001': { u: 'fresh.clone', d: 'Fresh Clone' }
+        }
+      },
       targets: [
         // Fresh + active vs stale + idle, equal trust. The fresh one must win
         // in EVERY region: worst-case locality 0.25 gives 2*1*(1+3)*0.25 = 2,
@@ -1390,6 +1398,16 @@ async function reset(settings) {
       store.local.idNames &&
       store.local.idNames['threads:4100000002'].d === null,
       JSON.stringify((store.local.idNames || {})['threads:4100000002']));
+
+    // The gap this closed: `targets` is a ranked slice, so an id on the list
+    // but outside that slice had no name anywhere and the history showed a
+    // bare number for an account somebody had actually blocked.
+    check('a listed id outside the ranked slice still learns its name',
+      store.local.idNames &&
+      store.local.idNames['threads:63082166531'] &&
+      store.local.idNames['threads:63082166531'].u === 'unranked.clone' &&
+      store.local.idNames['threads:63082166531'].d === 'Unranked Clone',
+      JSON.stringify((store.local.idNames || {})['threads:63082166531']));
 
     // The list URL must be byte-identical for every install: a per-user query
     // string is the difference between an edge-cached 304 and a fresh transfer
@@ -1602,6 +1620,143 @@ async function reset(settings) {
       splitSub.ok && splitCalls.length === 1 &&
       splitCalls[0] === 'https://demo.example/v1/reports',
       splitCalls[0]);
+
+    delete global.fetch;
+  }
+  // -- 13c. reports that used to be destroyed --------------------------------
+  //
+  // On Threads a profile is a handle, never a numeric id: the id can only come
+  // from an alias cache that a MAIN-world sweep fills opportunistically, so it
+  // is missing whenever that sweep has not happened to see the account. Every
+  // one of those reports used to be sent with an empty targetId, refused with
+  // a 400, and dropped -- after the sheet had already said "Sent".
+  {
+    await reset({ platformBlockEnabled: false });
+    await setSettings({ apiBase: 'https://demo.example/v1' });
+
+    const bodies = [];
+    global.fetch = async (url, opts) => {
+      bodies.push(JSON.parse((opts || {}).body || '{}'));
+      return { ok: true, status: 201, headers: { get: () => null },
+               text: async () => '{"ok":true}', json: async () => ({ ok: true }) };
+    };
+
+    const noId = await send('sw:submit-report', {
+      platform: 'threads', profileId: null, username: 'Some.Clone',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    check('a Threads report with no numeric id is filed against the handle',
+      noId.ok && bodies[0] && bodies[0].targetId === '@some.clone',
+      JSON.stringify(bodies[0] && bodies[0].targetId));
+    check('and the handle is normalised, so one account is one target',
+      bodies[0] && bodies[0].targetUser === 'some.clone',
+      JSON.stringify(bodies[0] && bodies[0].targetUser));
+
+    // The prefix is not decoration: the server decides which kind of target it
+    // has by shape, so an all-digit handle must not be filed as a profile id.
+    bodies.length = 0;
+    await send('sw:submit-report', {
+      platform: 'threads', profileId: null, username: '12345678',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    check('an all-digit handle is still filed as a handle, not as an id',
+      bodies[0] && bodies[0].targetId === '@12345678',
+      JSON.stringify(bodies[0] && bodies[0].targetId));
+
+    // A numeric id, when there is one, is still what the report is filed
+    // against -- the fallback must not have taken over the normal case.
+    bodies.length = 0;
+    await send('sw:submit-report', {
+      platform: 'threads', profileId: '9990007777', username: 'has.an.id',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    check('a report that HAS an id is still filed against the id',
+      bodies[0] && bodies[0].targetId === '9990007777',
+      JSON.stringify(bodies[0] && bodies[0].targetId));
+
+    // The chip on a profile reads reportedCache through reportKeyFor. The
+    // cache used to be written under the id alone, so a handle-only report
+    // stored itself as 'threads:' and the profile the person had just
+    // reported went on saying nothing had happened.
+    const cached = Object.keys(store.local.reportedCache || {});
+    check('a handle-only report is cached where the status lookup will find it',
+      cached.includes('threads:@some.clone') && !cached.includes('threads:'),
+      JSON.stringify(cached));
+
+    delete global.fetch;
+  }
+
+  // -- 13d. a refusal is kept, not binned ------------------------------------
+  {
+    await reset({ platformBlockEnabled: false });
+    await setSettings({ apiBase: 'https://demo.example/v1' });
+
+    // The exact failure the bug produced: the server refuses with a 400.
+    global.fetch = async () => ({
+      ok: false, status: 400, headers: { get: () => null },
+      text: async () => '{"error":"bad_target"}',
+      json: async () => ({ error: 'bad_target' })
+    });
+
+    const refused = await send('sw:submit-report', {
+      platform: 'threads', profileId: null, username: 'refused.one',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    const box = store.local.reportOutbox || [];
+    check('a refused report is kept rather than dropped on the floor',
+      box.length === 1 && box[0].key === 'threads:@refused.one' &&
+      box[0].why === 'refused:400',
+      JSON.stringify(box.map(e => [e.key, e.why])));
+    check('and the caller is told it is queued, not that it failed',
+      refused.ok === true && refused.queued === true && refused.status === 'queued',
+      JSON.stringify(refused));
+
+    // The second, independent bug: every id-less target keyed itself
+    // 'threads:' and the de-duplication threw away all but the first.
+    await send('sw:submit-report', {
+      platform: 'threads', profileId: null, username: 'refused.two',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    const two = store.local.reportOutbox || [];
+    check('two different handle-only targets are two outbox entries, not one',
+      two.length === 2 &&
+      two.map(e => e.key).sort().join(',') ===
+        'threads:@refused.one,threads:@refused.two',
+      JSON.stringify(two.map(e => e.key)));
+
+    // De-duplication still has to work; it just has to key on the right thing.
+    await send('sw:submit-report', {
+      platform: 'threads', profileId: null, username: 'refused.two',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    check('but the same target reported twice is still one entry',
+      (store.local.reportOutbox || []).length === 2,
+      String((store.local.reportOutbox || []).length));
+
+    delete global.fetch;
+  }
+
+  // -- 13e. a report with nothing to file against ----------------------------
+  {
+    await reset({ platformBlockEnabled: false });
+    await setSettings({ apiBase: 'https://demo.example/v1' });
+    let called = 0;
+    global.fetch = async () => {
+      called++;
+      return { ok: true, status: 201, headers: { get: () => null },
+               text: async () => '{"ok":true}', json: async () => ({ ok: true }) };
+    };
+
+    const nothing = await send('sw:submit-report', {
+      platform: 'threads', profileId: null, username: '',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    check('a report naming no account at all is refused without a request',
+      !nothing.ok && called === 0,
+      JSON.stringify(nothing) + ' calls=' + called);
+    check('and it raises an alert rather than failing into a void',
+      Object.keys(store.local.actionAlerts || {}).length === 1,
+      JSON.stringify(store.local.actionAlerts || {}));
 
     delete global.fetch;
   }

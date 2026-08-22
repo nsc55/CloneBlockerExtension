@@ -248,6 +248,60 @@ const ID_RE = /^\d{4,24}$/;
 
 const normUsername = (u) => String(u || '').trim().toLowerCase().replace(/^@/, '');
 
+/**
+ * What a report is filed against.
+ *
+ * The numeric id when the page gave one. On Threads it very often did not: a
+ * Threads URL never carries an id, only /@handle, so the id can only come from
+ * the alias cache that the MAIN-world sweep of Meta's store fills
+ * opportunistically -- and a profile the sweep has not happened to see yet
+ * resolves to nothing at all.
+ *
+ * This used to send the empty string in that case. The server's schema requires
+ * targetId to be at least one character, so the report earned a 400, and a 400
+ * was treated as a refusal on the merits and dropped on the floor -- after the
+ * sheet had already said "Sent". That is the whole of the lost-reports bug: not
+ * a network problem, not the server, just the one field that is always present
+ * on Threads never being used.
+ *
+ * So a username is a target in its own right. Everything downstream already
+ * understood that and only intake validation did not: shared/logic.js routes a
+ * non-numeric target into the published usernames array rather than ids,
+ * the transparency page names it, and this extension's own blocklist index
+ * matches on it (identity.js setBlocklist). What was missing was only ever
+ * something non-empty to put in the field.
+ *
+ * Prefixed with '@' rather than sent bare, because the server decides which
+ * kind of target it has by SHAPE -- the same shape ID_RE tests -- and a handle
+ * that happens to be all digits would otherwise be filed as a numeric profile
+ * id, then published into the ids array as an account id that does not exist. The
+ * prefix makes the two impossible to confuse in either direction, and costs a
+ * character.
+ *
+ * KNOWN CONSEQUENCE, and it is a real one. An account reported once while its
+ * id was known and once while it was not produces TWO targets -- '9990007777'
+ * and '@handle' -- which the server aggregates as two records, so the votes
+ * split and a moderator sees the same account twice.
+ *
+ * That is accepted here rather than solved here, for two reasons. It is
+ * strictly better than what it replaces: the split half used to be no vote at
+ * all, because the report was destroyed. And it cannot be solved on this side
+ * -- merging two records is a decision about the whole store, which only the
+ * server can see. Everything the server needs is already on the wire: every
+ * report carries targetUser whenever a handle is known, including the ones
+ * filed against a numeric id, so the two records can be reconciled on the
+ * username without this extension changing again. Doing it the other way --
+ * always filing Threads against the handle -- would remove the split and cost
+ * cold blocking, because the published ids array is what seeds ranked targets
+ * and only a numeric id may go in it.
+ */
+function targetIdFor(payload) {
+  const id = String((payload && payload.profileId) || '').trim();
+  if (ID_RE.test(id)) return id.slice(0, 64);
+  const user = normUsername(payload && payload.username);
+  return user ? ('@' + user).slice(0, 64) : '';
+}
+
 const hex = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 
 // -- the reporter pseudonym ---------------------------------------------------
@@ -784,6 +838,18 @@ async function refreshBlocklist(force) {
       (byPlatform[plat] = byPlatform[plat] || {})[String(t.id)] =
         { u: t.username || null, d: t.displayName || null };
     }
+    // The published id -> name map, which unlike `targets` covers EVERY listed
+    // id rather than the ranked slice. Merged under the per-target names above
+    // rather than over them: a target record is the moderator's published
+    // detail for that account, and where both know a name they agree anyway.
+    const published = (payload && payload.idNames && typeof payload.idNames === 'object')
+      ? payload.idNames : {};
+    for (const plat of Object.keys(published)) {
+      const m = published[plat];
+      if (!m || typeof m !== 'object') continue;
+      byPlatform[plat] = Object.assign({}, m, byPlatform[plat] || {});
+    }
+
     for (const [plat, m] of Object.entries(byPlatform)) await rememberNames(plat, m);
   }
 
@@ -2357,18 +2423,40 @@ async function rememberDocIds(payload) {
  * loss, which is the single most valuable thing in the reachability design
  * because it costs almost nothing.
  *
- * Deliberately NOT retried: anything the server refused on its merits. A 400
- * is a report the server will never accept, and retrying it forever would be
- * a queue that never drains and a person told "sending" about something that
- * is not going to send.
+ * A refusal is kept too, which it did not used to be.
+ *
+ * The old rule was that anything the server refused on its merits was dropped
+ * immediately, on the reasoning that a 400 is a report the server will never
+ * accept and retrying it forever is a queue that never drains. The reasoning
+ * was sound and the consequence was not: the 400s actually being seen were
+ * OURS -- a malformed field this extension sent -- and every one of them
+ * destroyed somebody's report silently, because a payload the server rejects
+ * is exactly the payload nobody has a copy of any more.
+ *
+ * So a refusal is now kept, retried on the same ladder, and given up on after
+ * OUTBOX_MAX_TRIES rather than after one. A queue that never drains is still
+ * not acceptable, so the bound stays -- what changed is that reaching it is
+ * SAID OUT LOUD, through the same alert channel and badge a failed block uses,
+ * instead of the report simply ceasing to exist.
  */
 const OUTBOX = 'reportOutbox';
 const OUTBOX_MAX = 200;
 const OUTBOX_LADDER_MS = [60000, 300000, 1800000, 3 * 3600000, 12 * 3600000];
+// Six attempts spread across the ladder is a day and a half. Past that it is
+// not a transient failure any more.
+const OUTBOX_MAX_TRIES = 6;
 
 async function outboxAdd(payload, why) {
   const box = await getLocal(OUTBOX, []);
-  const key = payload.platform + ':' + String(payload.profileId || '');
+  // reportKeyFor, not the id alone.
+  //
+  // The id alone was 'threads:' for EVERY target whose numeric id had not been
+  // resolved -- one key shared by all of them -- so the de-duplication two
+  // lines down threw away every id-less report after the first. That is a
+  // second, independent way the same Threads profiles went missing, and it
+  // would have survived fixing the first one. reportKeyFor already falls back
+  // to the username, and is what reportStatus() looks up by.
+  const key = reportKeyFor(payload.platform, payload.profileId, payload.username);
   if (box.some(e => e.key === key)) return;      // one attempt per target
   box.push({ key, payload, tries: 0, at: Date.now(), nextAt: Date.now() + OUTBOX_LADDER_MS[0], why });
   // Oldest first out, so a browser left open for a month does not grow without
@@ -2391,9 +2479,15 @@ async function flushOutbox() {
   for (const e of box) {
     if (e.nextAt > now) { keep.push(e); continue; }
     const out = await submitReport(e.payload, { noQueue: true });
-    if (out.ok) { sent++; continue; }
-    if (!out.retryable) continue;               // refused on its merits: drop it
+    if (out.ok) { sent++; await clearAlert(e.key); continue; }
     e.tries++;
+    // Given up on -- and said so. The person asked for this and it did not
+    // happen, which is precisely what the alert channel and the red badge
+    // exist for; dropping it quietly is what made the original bug invisible.
+    if (e.tries >= OUTBOX_MAX_TRIES) {
+      await noteAlert(e.key, out.error || T('sw_reportRefused'), 'report');
+      continue;
+    }
     e.nextAt = now + OUTBOX_LADDER_MS[Math.min(e.tries, OUTBOX_LADDER_MS.length - 1)];
     keep.push(e);
   }
@@ -2429,6 +2523,19 @@ async function submitReport(payload, opts) {
   // where it is either true or false.
   const pseudonym = await reporterPseudonym(reporter);
 
+  // Nothing to file against. With the username fallback in targetIdFor() this
+  // needs BOTH the id and the handle to be missing, which means the page never
+  // identified the account at all -- so there is no report to send and no
+  // amount of retrying will invent one. Refused here rather than sent to earn
+  // a 400, and surfaced rather than returned into a void: the caller fires
+  // this without awaiting it, so a return value nobody reads is the same as
+  // silence, and silence is what this whole change is about.
+  if (!targetIdFor(payload)) {
+    await noteAlert(reportKeyFor(payload.platform, payload.profileId, payload.username),
+                    T('sw_reportNoTarget'), 'report');
+    return { ok: false, error: T('sw_reportNoTarget') };
+  }
+
   const ctx = settings.shareRegion === false ? {} : clientContext();
   const body = {
     // The server's vocabulary, not the old store's. `pseudonym` is the same
@@ -2438,7 +2545,7 @@ async function submitReport(payload, opts) {
     // carry (docs/SECURITY-REVIEW.md 2.3).
     pseudonym,
     platform: payload.platform,
-    targetId: String(payload.profileId || '').slice(0, 64),
+    targetId: targetIdFor(payload),
     // Normalised, not just clipped: '@Fake.Person' and 'fake.person' are the
     // same account, and two spellings of one target would otherwise be two
     // rows the moderator has to reconcile.
@@ -2475,7 +2582,7 @@ async function submitReport(payload, opts) {
       if (!(opts && opts.noQueue)) {
         await outboxAdd(payload, 'busy');
         return { ok: true, queued: true,
-                 key: payload.platform + ':' + String(payload.profileId || ''),
+                 key: reportKeyFor(payload.platform, payload.profileId, payload.username),
                  status: 'queued', error: T('sw_reportBusy') };
       }
       return { ok: false, retryable: true, error: T('sw_reportBusy') };
@@ -2488,7 +2595,8 @@ async function submitReport(payload, opts) {
       // next time rather than the one that just failed.
       await demoteHost(base);
       await outboxAdd(payload, 'unreachable');
-      return { ok: true, queued: true, key: payload.platform + ':' + String(payload.profileId || ''),
+      return { ok: true, queued: true,
+               key: reportKeyFor(payload.platform, payload.profileId, payload.username),
                status: 'queued', error: T('sw_reportQueued') };
     }
     return { ok: false, retryable: true, error: T('sw_serverUnreachable', (e && e.message) || e) };
@@ -2497,10 +2605,35 @@ async function submitReport(payload, opts) {
     if (json && json.error === 'signed-out') {
       return { ok: false, signedOut: true, error: json.message || T('sw_signInGeneric') };
     }
-    return { ok: false, error: (json && json.error) || T('sw_serverHttp', res.status) };
+    // THIS is where every lost report went.
+    //
+    // It used to return here with the payload held nowhere: the sheet had
+    // already said "Sent", the caller does not await the result, and the
+    // outbox was only ever written on a 429/503 or a thrown fetch. A 400 --
+    // which is what an empty targetId earned, on every Threads profile whose
+    // numeric id had not been learned -- ended the report's existence.
+    //
+    // Now it is kept. Whether it is worth retrying is decided by the outbox,
+    // which is the only place that can see how many times it has already
+    // failed; what must not be decided here is that the report stops existing
+    // because one response was not the one expected.
+    const err = (json && json.error) || T('sw_serverHttp', res.status);
+    if (!(opts && opts.noQueue)) {
+      await outboxAdd(payload, 'refused:' + res.status);
+      return { ok: true, queued: true,
+               key: reportKeyFor(payload.platform, payload.profileId, payload.username),
+               status: 'queued', error: err };
+    }
+    return { ok: false, status: res.status, error: err };
   }
 
-  const key = payload.platform + ':' + String(payload.profileId || '');
+  // The same key reportStatus() reads by.
+  //
+  // This was the id alone, so a report filed against a username was cached
+  // under 'threads:' while the chip looked it up as 'threads:@handle' -- and
+  // the profile a person had just reported went on saying nothing had
+  // happened. One scheme, in one function, used by both.
+  const key = reportKeyFor(payload.platform, payload.profileId, payload.username);
   const cache = await getLocal(KEYS.REPORTED, {});
   cache[key] = { status: json.held ? 'held' : 'pending', count: 1,
                  blocked: false, at: Date.now() };
