@@ -1,0 +1,423 @@
+:root {
+  --bg: #ffffff;
+  --fg: #16181c;
+  --muted: #5b6470;
+  --line: #e3e6ea;
+  --card: #f7f8fa;
+  --accent: #1d6fe0;
+  --danger: #c0392b;
+  --warn: #b7791f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --fg: #e8eaed;
+    --muted: #9aa4b2;
+    --line: #2b2f36;
+    --card: #1e2127;
+    --accent: #6ea8fe;
+    --danger: #ff6b5e;
+    --warn: #e0b341;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body.popup { width: 340px; padding: 12px; }
+body.options { max-width: 720px; margin: 0 auto; padding: 28px 22px 60px; }
+body.activity { max-width: 760px; margin: 0 auto; padding: 28px 22px 60px; }
+
+/* full pages (options, activity): a real header with room for navigation */
+.page-hd {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 18px;
+}
+.page-hd h1 { font-size: 20px; }
+.page-hd .note { margin: 4px 0 0; }
+.page-nav { display: flex; gap: 14px; flex: 0 0 auto; padding-top: 4px; }
+.page-nav a { color: var(--accent); font-size: 13px; text-decoration: none; }
+.page-nav a:hover { text-decoration: underline; }
+
+/* activity: stat tiles */
+.tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.tile {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 2px;
+}
+.tile .tv { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.tile .tk { font-size: 11px; color: var(--muted); }
+
+/* activity: rows */
+.sec-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.sec-hd h2 { margin: 0; }
+.arow {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 2px; border-top: 1px solid var(--line);
+}
+.arow:first-child { border-top: 0; }
+.aleft { min-width: 0; }
+.amain { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asub { color: var(--muted); font-size: 12px; margin-top: 1px; }
+.aright { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.pill.warm { background: rgba(46, 160, 67, .12); color: #2ea043; border-color: transparent; }
+.pill.cold { background: rgba(110, 168, 254, .14); color: var(--accent); border-color: transparent; }
+.pill.ok   { background: rgba(46, 160, 67, .12); color: #2ea043; border-color: transparent; }
+.pill.bad  { background: rgba(192, 57, 43, .12); color: var(--danger); border-color: transparent; }
+.pill.warn { background: rgba(183, 121, 31, .14); color: var(--warn); border-color: transparent; }
+.pill.dry  { background: rgba(150, 150, 160, .14); color: var(--muted); border-color: transparent; }
+.pill.plat, .pill.time { color: var(--muted); }
+/* The kind of account, when the list says. Outlined rather than filled: it
+   describes the target, where the filled chips describe what is happening to
+   it, and those are the ones a reader is scanning for. */
+.pill.tag { color: var(--fg); border-color: var(--line); }
+
+/* activity: key/value sync block */
+.kv-grid { display: grid; grid-template-columns: 130px 1fr; gap: 5px 14px; }
+.kv-grid .kk { color: var(--muted); }
+.kv-grid .vv { min-width: 0; overflow-wrap: anywhere; }
+
+/* activity: banners and filter chips */
+.banner { border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12.5px; }
+.banner.err  { background: rgba(192, 57, 43, .1); color: var(--danger); border: 1px solid rgba(192, 57, 43, .3); }
+.banner.warn { background: rgba(183, 121, 31, .1); color: var(--warn); border: 1px solid rgba(183, 121, 31, .3); }
+.filters { display: flex; gap: 6px; }
+.chipbtn {
+  font: inherit; font-size: 11px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
+}
+.chipbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+.pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+.row .k { color: var(--muted); flex: 0 0 auto; }
+.row .v { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.inline { width: auto; margin-top: 0; }
+
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+.toggle.sub { margin-left: 22px; }
+/* A child control whose parent says it has nothing to act on.
+   Dimmed, NOT disabled: dry run lives under "Pause blocking", and disabling it
+   while paused would mean the only way to turn simulation ON is to make
+   blocking live first -- which is precisely backwards for the one workflow it
+   exists for. So it stays usable and merely stops claiming to be doing
+   something. */
+.toggle.sub.inactive, .field.inactive { opacity: .48; }
+.toggle.sub.inactive:focus-within, .field.inactive:focus-within { opacity: 1; }
+.toggle input { margin-top: 2px; flex: 0 0 auto; }
+
+.note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.err  { color: var(--danger); font-size: 12px; margin-top: 8px; word-break: break-word; }
+.warn { color: var(--warn); }
+.hidden { display: none; }
+
+/* popup: the action card names the profile the page is showing, so it has to
+   read as a heading rather than as another status row. */
+.who {
+  font-size: 16px; font-weight: 650; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.state {
+  font-size: 12px; margin-top: 3px; display: flex; align-items: center; gap: 6px;
+  color: var(--muted);
+}
+.state::before {
+  content: ""; width: 7px; height: 7px; border-radius: 999px;
+  background: currentColor; flex: 0 0 auto;
+}
+.state:empty { display: none; }
+.state.listed { color: var(--danger); }
+.state.clear  { color: var(--muted); }
+.state.you    { color: var(--accent); }
+
+/* Wraps rather than clipping. The note and the links fit side by side in
+   English and do not in Vietnamese, where "2 trong danh sách của bạn" lost its
+   sync time to an ellipsis -- the one thing that line exists to say. Given a
+   second row it fits in both; the ellipsis stays as the last resort. */
+footer {
+  margin-top: 8px; display: flex; align-items: center; justify-content: space-between;
+  gap: 4px 10px; flex-wrap: wrap;
+}
+.foot-note { color: var(--muted); font-size: 11px; overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+.foot-links { flex: 0 0 auto; display: flex; gap: 10px; }
+footer a { color: var(--accent); font-size: 12px; text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* options */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-weight: 600; margin-bottom: 4px; }
+.field .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.field input[type="text"],
+.field input[type="url"],
+.field input[type="number"],
+.field select {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.field input[type="number"] { max-width: 120px; }
+
+.inline-row { display: flex; gap: 8px; align-items: center; }
+
+/* options: the tag checkboxes. Two columns so the whole vocabulary is one
+   glance rather than a scroll -- the point of the group is comparing the
+   kinds against each other, not reading them in turn. Falls to one column
+   where there is no room for two. */
+.taglist { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 16px; }
+
+/* options: the two jobs the extension can be asked to do.
+   These are the page's primary decisions, so each is a card you click
+   anywhere on rather than a tick box in a list -- and the whole card carries
+   the state, because the cost line under each title is the part people need
+   to read before deciding. The two are independent, so both cards can be lit
+   at once; a card left dark is a job simply switched off. */
+.jobs { display: grid; gap: 10px; }
+.job {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.job:hover { border-color: var(--accent); }
+.job:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.job-hd {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-weight: 650; font-size: 13.5px; letter-spacing: -0.01em;
+}
+.job-hd input { margin: 2px 0 0; flex: 0 0 auto; }
+.job p { margin: 6px 0 0 23px; font-size: 12.5px; }
+.job p.cost { color: var(--muted); font-size: 12px; }
+.job p.cost strong { color: var(--fg); }
+
+/* options: everything an ordinary user should not have to meet */
+details.adv { margin-top: 18px; }
+details.adv > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 650;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::before { content: "\25B8"; color: var(--muted); margin-right: 8px; }
+details.adv[open] > summary::before { content: "\25BE"; }
+details.adv[open] > summary { margin-bottom: 10px; }
+
+.callout {
+  border-left: 3px solid var(--warn);
+  background: var(--card);
+  border-radius: 0 8px 8px 0;
+  padding: 10px 12px;
+  margin: 12px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.callout strong { color: var(--fg); }
+
+.status { font-size: 12px; margin-left: 10px; color: var(--muted); }
+.status.ok { color: #2e7d32; }
+.status.bad { color: var(--danger); }
+
+pre.diag {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 11px;
+  overflow-x: auto;
+  max-height: 260px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------------------------------------------------------------------------
+   welcome: the tab that opens once, on first install
+   -------------------------------------------------------------------------*/
+
+/* The hero borrows the store listing's clothes -- the same indigo field, the
+   same yellow, the same cow -- so the first thing somebody sees after
+   installing is the thing that persuaded them to. It is a band rather than
+   the whole page: yellow on indigo is a poster, and three paragraphs of
+   instructions set on it would be a poster nobody reads. Below the band the
+   page goes back to the extension's own colours, which follow the system
+   theme like every other screen here. */
+body.welcome { max-width: none; margin: 0; padding: 0; }
+
+.wl-hero {
+  background: radial-gradient(120% 130% at 12% 0%, #2b3566 0%, #1a2044 45%, #12162b 100%);
+  color: #f4f6fc;
+  padding: 44px 22px 40px;
+  text-align: center;
+}
+.wl-mark {
+  width: 84px; height: 84px; border-radius: 20px; display: block; margin: 0 auto;
+  box-shadow: 0 10px 30px rgba(6, 9, 24, .55);
+}
+.wl-hero h1 {
+  margin: 20px 0 0; font-size: 30px; line-height: 1.15; letter-spacing: -0.02em;
+  color: #ffc72e;
+}
+.wl-lede {
+  margin: 10px auto 0; max-width: 460px; font-size: 14px; line-height: 1.5;
+  color: #c2cbee;
+}
+
+.wl-body { max-width: 560px; margin: 0 auto; padding: 30px 22px 48px; }
+
+.wl-steps { list-style: none; margin: 0; padding: 0; }
+.wl-step { display: flex; gap: 14px; padding: 0 0 22px; }
+/* The number carries the sequence on its own, so the list needs no rule down
+   the side and no card around each step: three of those stacked read as three
+   separate things to do rather than as one short procedure. */
+.wl-num {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 650; line-height: 26px; text-align: center;
+}
+.wl-text { min-width: 0; }
+/* Overrides the shared h2, which is a small uppercase section label -- right
+   above a table of rows, wrong as the title of a step somebody is reading. */
+.wl-step h2 {
+  margin: 3px 0 4px; font-size: 15px; text-transform: none; letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.wl-step p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+/* The button, drawn at the size it appears on the page, beside the words that
+   name it. */
+.wl-glyph {
+  display: flex; align-items: center; gap: 9px; margin-top: 10px !important;
+  padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); width: fit-content;
+}
+.wl-glyph svg { flex: 0 0 auto; color: var(--fg); }
+
+/* The shared-list callout. The one thing on this page that is not an
+   instruction, so it gets the brand's yellow down its edge rather than
+   another number: the reader has just been told what to click three times,
+   and this is what clicking it is FOR. */
+.wl-key {
+  border: 1px solid var(--line); border-left: 3px solid #ffc72e;
+  border-radius: 8px; background: var(--card);
+  padding: 14px 16px; margin: 4px 0 22px;
+}
+.wl-key h2 {
+  margin: 0 0 5px; font-size: 14px; text-transform: none; letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.wl-key p { margin: 0; color: var(--muted); line-height: 1.55; }
+
+.wl-aside {
+  border-top: 1px solid var(--line); padding-top: 16px; margin-top: 4px !important;
+  line-height: 1.55;
+}
+.wl-go { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.wl-foot { margin-top: 18px !important; }
+.wl-foot a { color: var(--accent); }
+
+/* -- long lists: search, sort, pager --------------------------------------
+   The activity page's queue and history both grow without limit. These are
+   the controls src/common/listview.js renders into them. */
+.listctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+           margin: 0 0 10px; }
+.listsearch { display: flex; align-items: center; }
+.listctl input[type="search"] { min-width: 200px; }
+.listctl select { font-size: 12px; padding: 5px 8px; }
+.listcount { margin-left: auto; font-variant-numeric: tabular-nums; }
+.chipbtn.dir { min-width: 30px; }
+.listpager { display: flex; align-items: center; justify-content: center;
+             gap: 6px; margin-top: 12px; }
+.listpager .chipbtn { min-width: 30px; }
+.listpager .chipbtn[disabled] { opacity: .35; cursor: default; }
+.listpager .note { min-width: 110px; text-align: center;
+                   font-variant-numeric: tabular-nums; }
+
+/* Retry sits at the end of a queue row, not in its own column: the row is a
+   sentence about one account and this is the one thing you can do to it. */
+.btn.inline.retry { margin-left: auto; align-self: center; }
+
+/* -- the first-run language picker --------------------------------------- */
+.wl-lang { display: flex; align-items: center; justify-content: flex-end;
+           gap: 8px; padding: 10px 16px 0; }
+.wl-langlbl { font-size: 12px; color: var(--muted); }
+.wl-lang select { font-size: 12px; padding: 5px 8px; }
+
+/* The failed-action banner on the activity page. Red rather than the usual
+ * card border, because it is the only thing on that page somebody was sent
+ * there to read -- the toolbar badge is red for the same reason. */
+.alertcard { border-color: #c53030; }
+.alertcard h2 { color: #fc8181; }

@@ -1,0 +1,30 @@
+{
+  "name": "cloneblocker",
+  "version": "1.0.1",
+  "description": "Chrome MV3 extension: report a clone once, and when it is approved every Clone Blocker user blocks that account on Facebook and Threads.",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nsc55/CloneBlockerExtension.git"
+  },
+  "scripts": {
+    "test": "node tools/check.js && node tools/queue-test.js",
+    "test:static": "node tools/check.js",
+    "test:queue": "node tools/queue-test.js",
+    "test:browser": "node tools/e2e-test.js",
+    "test:headful": "node tools/e2e-test.js --headful",
+    "test:i18n": "node tools/i18n-visual.js",
+    "test:i18n-audit": "node tools/i18n-audit.js",
+    "test:optimistic": "node tools/optimistic-test.js",
+    "test:reload": "node tools/profile-reload-test.js",
+    "check": "node tools/check.js",
+    "pack": "node tools/pack.js",
+    "crx": "node tools/make-crx.js",
+    "icons": "node tools/make-icons.js",
+    "store-assets": "node tools/make-store-assets.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

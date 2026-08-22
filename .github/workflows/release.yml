@@ -1,0 +1,101 @@
+# Build the release artefacts: the Web Store zip and the signed CRX.
+#
+# The zip is built by tools/pack.js exactly as it is built locally —
+# deterministic, allowlisted, and refused unless tools/check.js passes, which
+# pack.js runs itself. The CRX is the same zip wrapped and signed by
+# tools/make-crx.js, so the two artefacts provably carry identical bytes.
+#
+# THE SIGNING KEY DEFINES THE EXTENSION ID. Generate it once, locally:
+#
+#     node tools/make-crx.js --new-key crx-key.pem
+#
+# then paste the file's contents into the repository secret CRX_PRIVATE_KEY
+# (Settings > Secrets and variables > Actions > New repository secret). Keep
+# the file backed up and out of the tree — .gitignore refuses *.pem. Losing
+# the key orphans every installed copy; leaking it lets someone else publish
+# updates as this extension.
+#
+# Pushing a v* tag builds both files and publishes a GitHub Release. In this
+# repository tags are pushed the same way commits are — at a public snapshot
+# commit, for example:
+#
+#     git push origin <public-commit-sha>:refs/tags/v1.0.1
+#
+# A manual run (workflow_dispatch) builds the same files and leaves them as a
+# workflow artifact instead — a dry run for this pipeline.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the store zip
+        run: node tools/pack.js
+
+      - name: Read the version
+        run: echo "EXT_VERSION=$(node -p 'require("./manifest.json").version')" >> "$GITHUB_ENV"
+
+      - name: Write the signing key
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CRX_PRIVATE_KEY" ]; then
+            echo "::error::The CRX_PRIVATE_KEY secret is not set."
+            echo "::error::Generate a key once with: node tools/make-crx.js --new-key crx-key.pem"
+            echo "::error::then add the file's contents as the CRX_PRIVATE_KEY repository secret."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$CRX_PRIVATE_KEY" > "$RUNNER_TEMP/crx-key.pem"
+
+      - name: Build the CRX
+        run: node tools/make-crx.js --key "$RUNNER_TEMP/crx-key.pem"
+
+      - name: Checksums
+        run: cd dist && sha256sum "clone-blocker-$EXT_VERSION.zip" "clone-blocker-$EXT_VERSION.crx" | tee SHA256SUMS.txt
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/clone-blocker-$EXT_VERSION.zip" \
+            "dist/clone-blocker-$EXT_VERSION.crx" \
+            dist/SHA256SUMS.txt \
+            --title "Clone Blocker $GITHUB_REF_NAME" \
+            --notes "$(printf '%s\n' \
+              "Built by CI from this tag. Both artefacts carry identical files." \
+              "" \
+              "- clone-blocker-$EXT_VERSION.zip — the Chrome Web Store upload; or unzip it and use Load unpacked on chrome://extensions." \
+              "- clone-blocker-$EXT_VERSION.crx — the signed self-hosting build, for sideloading where Chrome allows it (developer mode, enterprise policy, Linux). The simplest manual install is the zip." \
+              "- SHA256SUMS.txt — checksums for both.")"
+
+      - name: Keep the artefacts (manual run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: clone-blocker-${{ env.EXT_VERSION }}
+          path: |
+            dist/clone-blocker-*.zip
+            dist/clone-blocker-*.crx
+            dist/SHA256SUMS.txt
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/crx-key.pem"

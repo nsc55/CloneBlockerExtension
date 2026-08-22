@@ -1,0 +1,19 @@
+# Line endings.
+#
+# This repository is developed on Windows and most of its files are stored with
+# CRLF, which is left alone deliberately: renormalising them would rewrite every
+# file for no benefit and bury real changes under whole-file diffs.
+#
+# The exception is anything that has to RUN on the Linux VPS. A shell script
+# committed with CRLF fails with `/usr/bin/env: 'bash\r': No such file or
+# directory` -- a message that reads like a missing interpreter and sends you
+# looking for the wrong problem entirely. It cost a debugging detour once; this
+# file is so it cannot cost another.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.conf          text eol=lf
+
+# Certificates and keys are bytes, not text.
+*.pem           binary
+*.crx           binary

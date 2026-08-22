@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="welcome_pageTitle">Clone Blocker</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body class="welcome">
+  <!-- Before anything else on the page, because everything else on the page is
+       words. It follows the browser's own language to begin with, so this is
+       for the person that guess is wrong for -- and the first run is exactly
+       when they should not have to go hunting through Settings for it. -->
+  <div class="wl-lang">
+    <label for="uiLanguage" class="wl-langlbl" data-i18n="options_languageLabel"></label>
+    <select id="uiLanguage">
+      <option value="auto" data-i18n="options_languageAuto"></option>
+      <option value="en" lang="en">English</option>
+      <option value="vi" lang="vi">Tiếng Việt</option>
+    </select>
+  </div>
+
+  <header class="wl-hero">
+    <img class="wl-mark" src="../../icons/icon128.png" alt="">
+    <h1 data-i18n="welcome_heading"></h1>
+    <p class="wl-lede" data-i18n="welcome_lede"></p>
+  </header>
+
+  <main class="wl-body">
+    <ol class="wl-steps">
+      <li class="wl-step">
+        <span class="wl-num">1</span>
+        <div class="wl-text">
+          <h2 data-i18n="welcome_step1Title"></h2>
+          <p data-i18n="welcome_step1Body"></p>
+        </div>
+      </li>
+
+      <li class="wl-step">
+        <span class="wl-num">2</span>
+        <div class="wl-text">
+          <h2 data-i18n="welcome_step2Title"></h2>
+          <p data-i18n="welcome_step2Body"></p>
+          <p class="wl-glyph">
+            <!-- The button as it actually appears in the page: same circle,
+                 same slash, same stroke as src/content/report-ui.js draws. A
+                 drawing of a different button is worse than no drawing. -->
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line>
+            </svg>
+            <span data-i18n="welcome_step2Caption"></span>
+          </p>
+        </div>
+      </li>
+
+      <li class="wl-step">
+        <span class="wl-num">3</span>
+        <div class="wl-text">
+          <h2 data-i18n="welcome_step3Title"></h2>
+          <p data-i18n="welcome_step3Body"></p>
+        </div>
+      </li>
+    </ol>
+
+    <!-- The payoff, and the reason the extension exists rather than a block
+         button existing. Given its own block rather than a fourth step: it is
+         not something the reader does, it is what happens because they did. -->
+    <section class="wl-key">
+      <h2 data-i18n="welcome_sharedTitle"></h2>
+      <p data-i18n="welcome_sharedBody"></p>
+    </section>
+
+    <p class="note wl-aside" data-i18n="welcome_aside"></p>
+
+    <div class="wl-go">
+      <button id="openFacebook" class="btn primary inline" data-i18n="welcome_openFacebook"></button>
+      <button id="openThreads" class="btn inline" data-i18n="welcome_openThreads"></button>
+    </div>
+
+    <p class="note wl-foot">
+      <span data-i18n="welcome_later"></span>
+      <a href="#" id="openOptions" data-i18n="welcome_settingsLink"></a>
+    </p>
+  </main>
+
+  <script src="../common/i18n.js"></script>
+  <script src="../common/protocol.js"></script>
+  <script src="welcome.js"></script>
+</body>
+</html>

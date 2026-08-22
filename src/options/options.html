@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="options_pageTitle">Clone Blocker</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body class="options">
+  <header class="page-hd">
+    <div>
+      <h1 data-i18n="appName"></h1>
+      <p class="note" data-i18n="options_tagline"></p>
+    </div>
+    <nav class="page-nav">
+      <a href="#" id="openActivity" data-i18n="options_activityLink"></a>
+    </nav>
+  </header>
+
+  <!-- The two jobs the extension can be asked to do. Everything else on this
+       page is a detail of how they behave, which is why the rest of it sits
+       behind Advanced.
+
+       Tick boxes rather than the radio pair this used to be. The old picker
+       said passive OR active, which was never true -- active always meant
+       both -- and it left "work through the list but leave what I scroll past
+       alone" with no way to say it. Two independent switches, both on. -->
+  <section class="card">
+    <div class="field">
+      <label for="uiLanguage" data-i18n="options_languageLabel"></label>
+      <select id="uiLanguage">
+        <option value="auto" data-i18n="options_languageAuto"></option>
+        <!-- Each language named as its own speakers write it. Never
+             translated, and `lang` says so to the build check and to a
+             screen reader alike. -->
+        <option value="en" lang="en">English</option>
+        <option value="vi" lang="vi">Tiếng Việt</option>
+      </select>
+      <p class="hint" data-i18n="options_languageHint"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="options_workHeading"></h2>
+
+    <div class="jobs">
+      <label class="job">
+        <span class="job-hd">
+          <input type="checkbox" id="blockSeen">
+          <span data-i18n="options_blockSeenTitle"></span>
+        </span>
+        <p data-i18n="options_blockSeenWhat"></p>
+        <p class="cost" data-i18n="options_blockSeenCost"></p>
+      </label>
+
+      <label class="job">
+        <span class="job-hd">
+          <input type="checkbox" id="blockFromList">
+          <span data-i18n="options_blockFromListTitle"></span>
+        </span>
+        <p data-i18n="options_blockFromListWhat"></p>
+        <p class="cost" data-i18n="options_blockFromListCost"></p>
+        <!-- Its own paragraph, not a bolded clause spliced into the one above:
+             a sentence assembled around a translated fragment is a sentence no
+             other language may reorder. The emphasis travels inside the
+             message instead. -->
+        <p class="cost" data-i18n="options_blockFromListNeedsTab"></p>
+      </label>
+    </div>
+
+    <!-- Directly under the switch whose one condition it removes, rather than
+         in Advanced with the safety valves. Its effect is a browser tab
+         appearing on its own, and a control with a visible effect has to be
+         somewhere a person can find without being told where to look. -->
+    <label class="toggle"><input type="checkbox" id="experimentalOwnTab"><span data-i18n="options_ownTab"></span></label>
+    <p class="hint" style="margin-left:22px" data-i18n="options_ownTabHint"></p>
+
+    <!-- Both unticked is a legitimate setting, not an error -- but a silent
+         one, since two empty boxes look the same as a page that has not
+         loaded yet. Say what it means. -->
+    <p id="blockNothingNote" class="note warn hidden" data-i18n="options_blockNothingNote"></p>
+    <p id="pausedNote" class="note hidden" data-i18n="options_pausedNote"></p>
+  </section>
+
+  <!-- Status, not configuration: the address is baked into the extension. -->
+  <section class="card">
+    <h2 data-i18n="options_blocklistHeading"></h2>
+    <p class="note" style="margin-top:0" data-i18n="options_blocklistNote"></p>
+    <div class="row">
+      <span class="k" data-i18n="options_lastSync"></span>
+      <span class="v" id="listSynced">&mdash;</span>
+    </div>
+    <div class="row">
+      <span class="k" data-i18n="options_onTheList"></span>
+      <span class="v" id="listCounts">&mdash;</span>
+    </div>
+    <div class="inline-row" style="margin-top:10px">
+      <button id="refreshList" class="btn inline" data-i18n="options_refreshNow"></button>
+      <span id="listStatus" class="status"></span>
+    </div>
+  </section>
+
+  <!-- Everything an ordinary user should never have to meet. Collapsed on
+       purpose: each control below is either a safety valve, a pacing number
+       that already ships at a sensible value, or diagnostics. -->
+  <details class="adv">
+    <summary data-i18n="options_advanced"></summary>
+
+    <section class="card">
+      <h2 data-i18n="options_blockingHeading"></h2>
+      <label class="toggle"><input type="checkbox" id="pauseBlocking"><span data-i18n="options_pauseBlocking"></span></label>
+      <p class="hint" style="margin-left:22px" data-i18n="options_pauseHint"></p>
+      <!-- These two sit under a NEGATED parent, which is the opposite of the
+           grammar the rest of this page uses: everywhere else an indented
+           control is live when the box above it is ticked. Ticking Pause makes
+           them inert instead, so the card says so rather than leaving the
+           indentation to imply the reverse. -->
+      <p id="pausedChildrenNote" class="hint hidden" style="margin-left:22px"
+         data-i18n="options_pausedChildrenNote"></p>
+      <label class="toggle sub"><input type="checkbox" id="platformBlockDryRun"><span data-i18n="options_dryRun"></span></label>
+      <label class="toggle sub"><input type="checkbox" id="allowRawNetworkFallback"><span data-i18n="options_rawFallback"></span></label>
+      <p class="hint" style="margin-left:22px" data-i18n="options_rawFallbackHint"></p>
+    </section>
+
+    <!-- Blocks are rationed; hiding is not. That asymmetry is the whole reason
+         this group exists, and the note below has to say so plainly or an
+         unticked box reads as "leave this account alone entirely". -->
+    <section class="card">
+      <h2 data-i18n="options_tagsHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_tagsNote"></p>
+      <div id="blockTags" class="taglist"></div>
+      <p class="note warn hidden" id="blockTagsNote" data-i18n="options_tagsNoneNote"></p>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="options_hideHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_hideNote"></p>
+      <label class="toggle"><input type="checkbox" id="hideEnabled"><span data-i18n="options_hideEnabled"></span></label>
+      <label class="toggle sub"><input type="checkbox" id="hideFeedPosts"><span data-i18n="options_hideFeedPosts"></span></label>
+      <label class="toggle sub"><input type="checkbox" id="hideComments"><span data-i18n="options_hideComments"></span></label>
+
+      <div class="field" style="margin-top:12px">
+        <label for="hideMode" data-i18n="options_hideModeLabel"></label>
+        <select id="hideMode">
+          <option value="collapse" data-i18n="options_hideModeCollapse"></option>
+          <option value="placeholder" data-i18n="options_hideModePlaceholder"></option>
+          <option value="blur" data-i18n="options_hideModeBlur"></option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="options_paceHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_paceNote"></p>
+
+      <div class="field" style="margin-top:12px">
+        <label for="warmMinDelayMs" data-i18n="options_warmDelayLabel"></label>
+        <div class="inline-row">
+          <input type="number" id="warmMinDelayMs" min="1" step="0.5">
+          <span class="hint" data-i18n="options_delayTo"></span>
+          <input type="number" id="warmMaxDelayMs" min="2" step="0.5">
+        </div>
+        <p class="hint" data-i18n="options_warmDelayHint"></p>
+      </div>
+
+      <div class="field">
+        <label for="minDelayMs" data-i18n="options_coldDelayLabel"></label>
+        <div class="inline-row">
+          <input type="number" id="minDelayMs" min="2" step="1">
+          <span class="hint" data-i18n="options_delayTo"></span>
+          <input type="number" id="maxDelayMs" min="3" step="1">
+        </div>
+        <p class="hint" data-i18n="options_coldDelayHint"></p>
+      </div>
+
+      <div class="field">
+        <label for="maxColdBlocksPerHour" data-i18n="options_maxColdLabel"></label>
+        <input type="number" id="maxColdBlocksPerHour" min="0" max="60" step="1">
+        <p class="hint" data-i18n="options_maxColdHint"></p>
+      </div>
+      <div class="field">
+        <label for="targetBudget" data-i18n="options_targetBudgetLabel"></label>
+        <input type="number" id="targetBudget" min="1" max="200" step="1">
+      </div>
+      <div class="field">
+        <label for="maxBlocksPerHour" data-i18n="options_maxPerHourLabel"></label>
+        <input type="number" id="maxBlocksPerHour" min="1" max="200" step="1">
+      </div>
+      <div class="field">
+        <label for="maxBlocksPerDay" data-i18n="options_maxPerDayLabel"></label>
+        <input type="number" id="maxBlocksPerDay" min="1" max="1000" step="1">
+      </div>
+
+      <label class="toggle"><input type="checkbox" id="shareRegion"><span data-i18n="options_shareRegion"></span></label>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="options_reportingHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_reportingNote"></p>
+      <label class="toggle"><input type="checkbox" id="reportUiEnabled"><span data-i18n="options_reportUiEnabled"></span></label>
+
+      <div class="field" style="margin-top:12px">
+        <label for="apiBase"><span data-i18n="options_apiBaseLabel"></span> <span class="hint" data-i18n="options_optional"></span></label>
+        <input type="url" id="apiBase" data-i18n-placeholder="options_apiBasePlaceholder">
+        <p class="hint" data-i18n="options_apiBaseHint"></p>
+      </div>
+      <div class="field">
+        <label for="submitToken"><span data-i18n="options_submitTokenLabel"></span> <span class="hint" data-i18n="options_submitTokenOnlyIf"></span></label>
+        <input type="text" id="submitToken" data-i18n-placeholder="options_submitTokenPlaceholder">
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="options_learnHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_learnNote"></p>
+      <button id="clearLearned" class="btn inline" data-i18n="options_clearLearned"></button>
+      <span id="learnedStatus" class="status"></span>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="options_diagHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_diagNote"></p>
+      <label class="toggle"><input type="checkbox" id="debug"><span data-i18n="options_debug"></span></label>
+      <div class="inline-row" style="margin-top:10px">
+        <button id="refreshDiag" class="btn inline" data-i18n="options_reload"></button>
+        <button id="resetQueue" class="btn inline" data-i18n="options_resetQueue"></button>
+      </div>
+      <pre id="diag" class="diag">—</pre>
+    </section>
+  </details>
+
+  <script src="../common/i18n.js"></script>
+  <script src="../common/protocol.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

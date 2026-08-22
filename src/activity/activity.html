@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="activity_pageTitle">Clone Blocker</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body class="activity">
+  <header class="page-hd">
+    <div>
+      <h1 data-i18n="activity_heading"></h1>
+      <p class="note" data-i18n="activity_tagline"></p>
+    </div>
+    <nav class="page-nav">
+      <a href="#" id="openOptions" data-i18n="activity_settingsLink"></a>
+    </nav>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- Failures come first, above everything, because the badge that sent
+       somebody here is about these and nothing else on the page explains it. -->
+  <section class="card alertcard hidden" id="alertCard">
+    <div class="sec-hd">
+      <h2 data-i18n="activity_alertsHeading"></h2>
+      <button id="alertsDismiss" class="btn inline" data-i18n="activity_alertsDismiss"></button>
+    </div>
+    <p class="note" id="alertsSummary"></p>
+    <div id="alertRows"></div>
+  </section>
+
+  <section class="tiles">
+    <div class="tile"><span class="tv" id="tBlocked">—</span><span class="tk" data-i18n="activity_tileBlocked"></span></div>
+    <div class="tile"><span class="tv" id="tQueued">—</span><span class="tk" data-i18n="activity_tileWaiting"></span></div>
+    <div class="tile"><span class="tv" id="tHour">—</span><span class="tk" id="tHourK" data-i18n="activity_tileThisHour"></span></div>
+    <div class="tile"><span class="tv" id="tDay">—</span><span class="tk" id="tDayK" data-i18n="activity_tileToday"></span></div>
+    <div class="tile"><span class="tv" id="tFailed">—</span><span class="tk" data-i18n="activity_tileFailed"></span></div>
+    <div class="tile"><span class="tv" id="tHidden">—</span><span class="tk" data-i18n="activity_tileHideList"></span></div>
+  </section>
+
+  <section class="card">
+    <div class="sec-hd">
+      <h2 data-i18n="activity_syncHeading"></h2>
+      <button id="refresh" class="btn inline" data-i18n="activity_refreshNow"></button>
+    </div>
+    <div class="kv" id="syncRows"></div>
+  </section>
+
+  <section class="card">
+    <div class="sec-hd">
+      <h2 data-i18n="activity_queueHeading"></h2>
+      <span class="note" id="queueNote"></span>
+      <button id="retryAll" class="btn inline hidden" data-i18n="activity_retryAll"></button>
+    </div>
+    <div class="listctl" id="queueCtl"></div>
+    <div id="queueRows"></div>
+    <p class="note hidden" id="queueEmpty" data-i18n="activity_queueEmpty"></p>
+    <nav class="listpager hidden" id="queuePager" data-i18n-label="list_pagesLabel"></nav>
+  </section>
+
+  <section class="card">
+    <div class="sec-hd">
+      <h2 data-i18n="activity_historyHeading"></h2>
+      <span class="filters">
+        <button class="chipbtn active" data-f="" data-i18n="activity_filterAll"></button>
+        <button class="chipbtn" data-f="ok" data-i18n="activity_filterBlocked"></button>
+        <button class="chipbtn" data-f="failed" data-i18n="activity_filterFailed"></button>
+        <button class="chipbtn" data-f="dry" data-i18n="activity_filterDry"></button>
+      </span>
+    </div>
+    <div class="listctl" id="logCtl"></div>
+    <div id="logRows"></div>
+    <p class="note hidden" id="logEmpty" data-i18n="activity_logEmpty"></p>
+    <nav class="listpager hidden" id="logPager" data-i18n-label="list_pagesLabel"></nav>
+  </section>
+
+  <script src="../common/i18n.js"></script>
+  <script src="../common/listview.js"></script>
+  <script src="../common/protocol.js"></script>
+  <script src="activity.js"></script>
+</body>
+</html>

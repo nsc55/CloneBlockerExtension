@@ -1,0 +1,1254 @@
+{
+  "activity_awaitingReviewValue": {
+    "message": "$1 reported, not yet decided",
+    "description": "Value of the 'awaiting review' row. $1 is how many reported profiles an admin has not ruled on."
+  },
+  "activity_bannerNothingOn": {
+    "message": "Nothing is being blocked. Neither blocking profiles you run into nor working through the list is switched on — turn one on in Settings.",
+    "description": "Banner across the top of the Activity page when both blocking switches -- profiles you run into, and working through the list -- are off."
+  },
+  "activity_chipBlocked": {
+    "message": "blocked",
+    "description": "Chip on a history row: this attempt succeeded."
+  },
+  "activity_chipDryRun": {
+    "message": "dry run",
+    "description": "Chip on a history row: this attempt was simulated and sent nothing."
+  },
+  "activity_chipFailed": {
+    "message": "failed",
+    "description": "Chip on a history row: this attempt failed."
+  },
+  "activity_chipFailedTries": {
+    "message": "$1 failed tries",
+    "description": "Chip on a queue row counting failed attempts against this target so far. $1 is a whole number."
+  },
+  "activity_chipRetryIn": {
+    "message": "retry in $1",
+    "description": "Chip on a queue row: this target failed and is waiting before the next attempt. $1 is a duration such as '45s'."
+  },
+  "activity_chipSeen": {
+    "message": "seen on screen",
+    "description": "Chip on a queue or history row: this profile was visible on the page when it was queued."
+  },
+  "activity_chipSuggested": {
+    "message": "suggested",
+    "description": "Chip on a queue or history row: this profile came from the ranked list, unseen."
+  },
+  "activity_failedGaveUp": {
+    "message": "$1 +$2 gave up",
+    "description": "Value of the 'failed' tile when some targets were abandoned after repeated failures. $1 is how many attempts failed; $2 is how many targets were given up on entirely."
+  },
+  "activity_filterAll": {
+    "message": "all",
+    "description": "Filter button above the block history: show every attempt."
+  },
+  "activity_filterBlocked": {
+    "message": "blocked",
+    "description": "Filter button above the block history: show only attempts that succeeded."
+  },
+  "activity_filterDry": {
+    "message": "dry runs",
+    "description": "Filter button above the block history: show only simulated attempts that sent nothing."
+  },
+  "activity_filterFailed": {
+    "message": "failed",
+    "description": "Filter button above the block history: show only attempts that failed."
+  },
+  "activity_haltedResumes": {
+    "message": "Halted after an account checkpoint. Resolve it on the site, then use Reset queue & stats in Settings. Resumes in $1.",
+    "description": "Banner across the top of the Activity page. $1 is a duration such as '4h'. A 'checkpoint' is the security challenge Facebook or Threads puts an account behind. 'Reset queue & stats' names a button in Settings, so the two must match."
+  },
+  "activity_heading": {
+    "message": "Activity",
+    "description": "Heading at the top of the Activity page. Must match the link that opens it from the popup and from Settings."
+  },
+  "activity_hideListValue": {
+    "message": "$1 ids + $2 usernames — hidden everywhere, costs nothing",
+    "description": "Value of the 'hide list' row. $1 is how many numeric profile ids the list holds, $2 how many usernames. 'Costs nothing' means hiding does not spend one of the rationed blocks."
+  },
+  "activity_historyHeading": {
+    "message": "Block history",
+    "description": "Heading of the Activity card listing past block attempts."
+  },
+  "activity_listUpdated": {
+    "message": "list updated $1 UTC",
+    "description": "Part of the 'last synced' value, saying when the server last republished the list. $1 is a date and time like '2026-08-21 09:14'. 'UTC' is the time zone name and is not translated."
+  },
+  "activity_listVersion": {
+    "message": "version $1",
+    "description": "Part of the 'last synced' value when the server identifies its list by a short fingerprint rather than a time. $1 is that fingerprint."
+  },
+  "activity_logEmpty": {
+    "message": "No block attempts yet.",
+    "description": "Shown in place of the block history when nothing has been attempted."
+  },
+  "activity_needsTabMany": {
+    "message": "$1 profiles are waiting to be blocked and no Facebook or Threads tab is open. Blocking runs inside those tabs — open one and leave it open.",
+    "description": "Banner across the top of the Activity page when $1 queued profiles cannot be blocked because no Facebook or Threads tab is open anywhere. $1 is never 1."
+  },
+  "activity_needsTabOne": {
+    "message": "1 profile is waiting to be blocked and no Facebook or Threads tab is open. Blocking runs inside those tabs — open one and leave it open.",
+    "description": "Banner across the top of the Activity page when exactly one queued profile cannot be blocked because no Facebook or Threads tab is open anywhere."
+  },
+  "activity_noList": {
+    "message": "no list configured — open Settings",
+    "description": "Value of the 'source' row when no blocklist address is set at all."
+  },
+  "activity_pageTitle": {
+    "message": "Clone Blocker — Activity",
+    "description": "Browser tab title of the Activity page. 'Clone Blocker' is the product name and is not translated."
+  },
+  "activity_pausedResumes": {
+    "message": "Paused by rate limiting. Resumes in $1.",
+    "description": "Banner across the top of the Activity page when blocking is waiting out its own hourly ceiling. $1 is a duration such as '18m'."
+  },
+  "activity_queueDryRun": {
+    "message": "dry run — simulating, sending nothing",
+    "description": "Note beside the queue heading when the dry run switch is on."
+  },
+  "activity_queueEmpty": {
+    "message": "Nothing queued. Targets arrive when a listed profile appears on screen, or from the list’s suggestions.",
+    "description": "Shown in place of the queue when nothing is waiting."
+  },
+  "activity_queueHeading": {
+    "message": "Waiting to be blocked",
+    "description": "Heading of the Activity card listing queued profiles."
+  },
+  "activity_queueListOffMany": {
+    "message": "$1 from the list are parked — working through the list is switched off",
+    "description": "Note beside the queue heading when $1 queued profiles came from the ranked list and working through the list is switched off. $1 is never 1."
+  },
+  "activity_queueListOffOne": {
+    "message": "1 from the list is parked — working through the list is switched off",
+    "description": "Note beside the queue heading when exactly one queued profile came from the ranked list and working through the list is switched off."
+  },
+  "activity_queueNoTabMany": {
+    "message": "$1 waiting — no Facebook or Threads tab open to block them in",
+    "description": "Note beside the queue heading: $1 profiles are waiting and no Facebook or Threads tab is open to block them in. $1 is never 1."
+  },
+  "activity_queueNoTabOne": {
+    "message": "1 waiting — no Facebook or Threads tab open to block it in",
+    "description": "Note beside the queue heading: one profile is waiting and no Facebook or Threads tab is open to block it in."
+  },
+  "activity_queueNothingOn": {
+    "message": "neither kind of blocking is switched on — nothing is being blocked at all",
+    "description": "Note beside the queue heading when both blocking switches are off, so nothing in the queue is going anywhere."
+  },
+  "activity_queuePacedMany": {
+    "message": "paced — one block at a time, shared across the $1 Facebook or Threads tabs you have open",
+    "description": "Note beside the queue heading when the queue is draining normally and $1 Facebook or Threads tabs are open. It names the pacing on purpose: more tabs do not mean more blocks. $1 is never 1."
+  },
+  "activity_queuePacedOne": {
+    "message": "paced — one block at a time, in the Facebook or Threads tab you have open",
+    "description": "Note beside the queue heading when the queue is draining normally and exactly one Facebook or Threads tab is open."
+  },
+  "activity_queuePaused": {
+    "message": "blocking is paused — these wait until it is switched back on",
+    "description": "Note beside the queue heading when the user has paused blocking."
+  },
+  "activity_reasonDaysAgo": {
+    "message": "reported $1d ago",
+    "description": "Part of the reason line: how long ago the most recent report against this profile came in. $1 is a whole number of days."
+  },
+  "activity_reasonNearYou": {
+    "message": "active near you",
+    "description": "Part of the reason line: most reports against this profile came from your own time zone and language."
+  },
+  "activity_reasonRank": {
+    "message": "rank $1",
+    "description": "Part of the reason line: this profile's position in the ranked list. $1 is a number."
+  },
+  "activity_reasonSuggested": {
+    "message": "suggested from the list",
+    "description": "Why a queued or blocked profile was picked: the ranked list nominated it, unseen."
+  },
+  "activity_reasonToday": {
+    "message": "reported today",
+    "description": "Part of the reason line: the most recent report against this profile came in today."
+  },
+  "activity_reasonVelocity": {
+    "message": "active $1× in 7 days",
+    "description": "Part of the reason line: how many reports this profile drew in the last week. $1 is a whole number; '×' is the multiplication sign used here as 'times'."
+  },
+  "activity_reasonWarm": {
+    "message": "on your blocklist · seen on screen",
+    "description": "Why a queued or blocked profile was picked: it is on the list and it appeared on screen."
+  },
+  "activity_refreshEveryValue": {
+    "message": "$1 min",
+    "description": "Value of the 'refresh every' row. $1 is a whole number of minutes."
+  },
+  "activity_refreshNow": {
+    "message": "Refresh now",
+    "description": "Button in the List sync card: fetch the blocklist again immediately."
+  },
+  "activity_refreshing": {
+    "message": "Refreshing…",
+    "description": "The Refresh now button while the request is in flight."
+  },
+  "activity_settingsLink": {
+    "message": "Settings",
+    "description": "Navigation link at the top right of the Activity page; opens the settings page."
+  },
+  "activity_syncAwaitingReview": {
+    "message": "awaiting review",
+    "description": "Row label in the List sync card; its value is how many reports an admin has not decided on yet."
+  },
+  "activity_syncBlockTargets": {
+    "message": "block targets",
+    "description": "Row label in the List sync card; its value is how many ranked profiles were taken for real blocking."
+  },
+  "activity_syncHeading": {
+    "message": "List sync",
+    "description": "Heading of the Activity card reporting where the downloaded blocklist came from and when."
+  },
+  "activity_syncHideList": {
+    "message": "hide list",
+    "description": "Row label in the List sync card; its value is how many entries are hidden on sight."
+  },
+  "activity_syncLastSynced": {
+    "message": "last synced",
+    "description": "Row label in the List sync card; its value is how long ago the list was fetched."
+  },
+  "activity_syncRefreshEvery": {
+    "message": "refresh every",
+    "description": "Row label in the List sync card; its value is how often the list is fetched, e.g. '60 min'."
+  },
+  "activity_syncSource": {
+    "message": "source",
+    "description": "Row label in the List sync card; its value is the address the blocklist was fetched from."
+  },
+  "activity_tagline": {
+    "message": "What has been blocked, what is waiting, and where the list stands.",
+    "description": "One-line summary under the Activity page heading."
+  },
+  "activity_targetsTaken": {
+    "message": "$1 taken of $2 suggested",
+    "description": "Value of the 'block targets' row. $1 is how many ranked profiles this browser took, $2 how many the server offered."
+  },
+  "activity_tileBlocked": {
+    "message": "blocked",
+    "description": "Caption under the counter tile showing how many profiles have been blocked in total."
+  },
+  "activity_tileFailed": {
+    "message": "failed",
+    "description": "Caption under the counter tile showing how many block attempts failed."
+  },
+  "activity_tileHideList": {
+    "message": "on the hide list",
+    "description": "Caption under the counter tile showing how many entries the downloaded blocklist holds."
+  },
+  "activity_tileThisHour": {
+    "message": "this hour",
+    "description": "Caption under the counter tile showing blocks used against the hourly ceiling, e.g. '3/15'."
+  },
+  "activity_tileToday": {
+    "message": "today",
+    "description": "Caption under the counter tile showing blocks used against the daily ceiling, e.g. '11/60'."
+  },
+  "activity_tileWaiting": {
+    "message": "waiting",
+    "description": "Caption under the counter tile showing how many profiles are queued for a block."
+  },
+  "appDesc": {
+    "message": "Report a clone once. When it is approved, everyone running Clone Blocker blocks that account on Facebook and Threads.",
+    "description": "The one-line store description, under the name in the Chrome Web Store listing and on chrome://extensions. Hard limit of 132 characters."
+  },
+  "appName": {
+    "message": "Clone Blocker",
+    "description": "The product name. Shown in the Chrome Web Store listing, the extensions page, the toolbar tooltip and as the heading of the popup and the settings page. Never translated."
+  },
+  "common_idValue": {
+    "message": "id $1",
+    "description": "The numeric account id, shown under the name on Activity rows and in the report sheet. $1 is the id. Not translated: it is a label for a number."
+  },
+  "common_noResponse": {
+    "message": "no response",
+    "description": "Error shown when the extension's background service worker answered with nothing at all."
+  },
+  "common_profile": {
+    "message": "profile $1",
+    "description": "Names an account that only has a numeric id, because no display name or username is known for it yet. $1 is the numeric id. Used as the main line of Activity rows and in the popup."
+  },
+  "common_workerSilent": {
+    "message": "service worker did not respond",
+    "description": "Error shown in the popup and on the Activity page when the extension's background service worker never answered within ten seconds."
+  },
+  "hide_hiddenLabel": {
+    "message": "Hidden — $1",
+    "description": "Text on the thin bar left in place of a hidden post or comment. $1 is the name or id of whoever wrote it."
+  },
+  "hide_showButton": {
+    "message": "Show",
+    "description": "Button on the bar left in place of a hidden post, which puts the post back. Named inside options_hideModePlaceholder, so the two must match."
+  },
+  "options_activityLink": {
+    "message": "Activity",
+    "description": "Navigation link at the top right of the settings page; opens the Activity page."
+  },
+  "options_advanced": {
+    "message": "Advanced",
+    "description": "The expander that hides everything below the blocklist card on the settings page."
+  },
+  "options_apiBaseHint": {
+    "message": "Leave blank to use the directory the blocklist lives in.",
+    "description": "Explains the API base field."
+  },
+  "options_apiBaseLabel": {
+    "message": "API base",
+    "description": "Label of the text field holding the address reports are sent to. A technical setting; leave 'API' as is."
+  },
+  "options_apiBasePlaceholder": {
+    "message": "derived from the blocklist address",
+    "description": "Greyed-out text inside the empty API base field, saying what happens if it is left blank."
+  },
+  "options_blockFromListCost": {
+    "message": "Paced slowly and capped per hour, because working through strangers is the pattern that draws a checkpoint.",
+    "description": "What the second tick box costs in risk, under its description. A ‘checkpoint’ is the security challenge Facebook or Threads puts an account behind."
+  },
+  "options_blockFromListNeedsTab": {
+    "message": "<b>Needs a Facebook or Threads tab open</b> — blocks are issued through the site’s own code. Any tab will do, and the work carries on for as long as one is open.",
+    "description": "The one condition the second tick box has, under its description. The part inside <b>…</b> is shown in bold and may be moved anywhere in the sentence; <b> and </b> are not translated and nothing else may be marked up."
+  },
+  "options_blockFromListTitle": {
+    "message": "Work through the list too",
+    "description": "Label of the second tick box on the settings page: also block listed profiles you never scroll past. The word ‘too’ carries the meaning that the two boxes are independent and both ship on."
+  },
+  "options_blockFromListWhat": {
+    "message": "Adds the clones the list says are most active near you, even ones you never scroll past.",
+    "description": "What the second tick box does, under its label."
+  },
+  "options_blockNothingNote": {
+    "message": "Neither box is ticked, so the extension will not block anyone on its own. That is a real setting, not a fault: the list still syncs, hiding still applies if it is on, and Block now in the popup still works.",
+    "description": "Note shown when both tick boxes are off. It has to read as a state someone chose, not as an error. ‘Block now’ names the popup’s button, so the two must match."
+  },
+  "options_blockSeenCost": {
+    "message": "They were on your screen anyway, so these go through quickly and stay well clear of the rate limits.",
+    "description": "What the first tick box costs in risk, under its description. ‘Rate limits’ are the platform’s own limits on how often an account may block people."
+  },
+  "options_blockSeenTitle": {
+    "message": "Block clones I run into",
+    "description": "Label of the first tick box on the settings page: block listed profiles that appear while you browse."
+  },
+  "options_blockSeenWhat": {
+    "message": "Profiles from the list that appear on the page while you browse.",
+    "description": "What the first tick box does, under its label."
+  },
+  "options_blockingHeading": {
+    "message": "Blocking",
+    "description": "Heading of the first card inside Advanced, which holds the pause switch and two debugging switches."
+  },
+  "options_blocklistHeading": {
+    "message": "Blocklist",
+    "description": "Heading of the settings card that reports where the downloaded blocklist stands."
+  },
+  "options_blocklistNote": {
+    "message": "Served by the Clone Blocker project: one shared list, built from reports that people sent and a human approved. Everyone running the extension follows it, and there is nothing here to set up.",
+    "description": "Note under the blocklist section of the options page."
+  },
+  "options_checking": {
+    "message": "Checking…",
+    "description": "Status beside the Refresh now button while the request is in flight."
+  },
+  "options_clearLearned": {
+    "message": "Forget captured templates",
+    "description": "Button that discards whatever request shapes the extension has learned."
+  },
+  "options_cleared": {
+    "message": "Cleared",
+    "description": "Status beside the Forget captured templates button just after it was pressed."
+  },
+  "options_coldDelayHint": {
+    "message": "A random value in this range is used each time; fixed intervals look automated.",
+    "description": "Explains why the list-driven delay is a range rather than one number."
+  },
+  "options_coldDelayLabel": {
+    "message": "Delay after blocking someone taken off the list (seconds)",
+    "description": "Label of the pair of number fields holding the delay range for profiles the ranked list nominated. 'ms' is milliseconds."
+  },
+  "options_debug": {
+    "message": "Verbose console logging",
+    "description": "Tick box that makes the extension log its working to the browser console."
+  },
+  "options_delayTo": {
+    "message": "to",
+    "description": "Sits between the two number fields of a range, as in 'from 4000 to 11000'."
+  },
+  "options_diagHeading": {
+    "message": "Diagnostics",
+    "description": "Heading of the last card on the settings page, which dumps internal state for debugging."
+  },
+  "options_diagNoAnswer": {
+    "message": "tab is open but the content script did not answer — reload it",
+    "description": "Shown in place of the diagnostics dump's page section when a site tab exists but the extension's script in it is not responding."
+  },
+  "options_diagNoTab": {
+    "message": "no Facebook or Threads tab open",
+    "description": "Shown in place of the diagnostics dump's page section when there is no site tab to read it from."
+  },
+  "options_diagNote": {
+    "message": "Page capability is read from the first open Facebook or Threads tab — open one, then press Reload.",
+    "description": "Explains where the diagnostics dump gets its information. 'Reload' names the button just below, so the two must match."
+  },
+  "options_diagUnavailable": {
+    "message": "unavailable",
+    "description": "Shown in place of the whole diagnostics dump when the background service worker could not be reached."
+  },
+  "options_dryRun": {
+    "message": "Dry run — resolve the strategy but send nothing",
+    "description": "Debugging tick box: go through every step of a block except actually sending it."
+  },
+  "options_failed": {
+    "message": "failed",
+    "description": "Status beside the Refresh now button when the refresh failed and the server gave no reason."
+  },
+  "options_hideComments": {
+    "message": "Hide comments",
+    "description": "Tick box: apply hiding to comments under posts."
+  },
+  "options_hideEnabled": {
+    "message": "Enable hiding",
+    "description": "Tick box that switches hiding on."
+  },
+  "options_hideFeedPosts": {
+    "message": "Hide feed posts",
+    "description": "Tick box: apply hiding to posts in the feed."
+  },
+  "options_hideHeading": {
+    "message": "Hide their content",
+    "description": "Heading of the card that controls suppressing listed profiles' posts and comments in your own browser."
+  },
+  "options_hideModeBlur": {
+    "message": "Blur in place",
+    "description": "Drop-down choice: a hidden post stays where it is but is blurred out."
+  },
+  "options_hideModeCollapse": {
+    "message": "Remove entirely",
+    "description": "Drop-down choice: a hidden post leaves no trace on the page."
+  },
+  "options_hideModeLabel": {
+    "message": "When hiding",
+    "description": "Label of the drop-down that picks what a hidden post looks like."
+  },
+  "options_hideModePlaceholder": {
+    "message": "Show a collapsed bar with a “Show” button",
+    "description": "Drop-down choice: a hidden post is replaced by a thin bar that can be expanded. The quoted word names the button on that bar, so the two must match."
+  },
+  "options_hideNote": {
+    "message": "Hiding suppresses a listed profile’s posts and comments in your browser without touching your account. Off by default: real blocks are the product, and this is for people who also want the whole list out of sight straight away.",
+    "description": "Explains what hiding is and why it ships switched off."
+  },
+  "options_languageAuto": {
+    "message": "Same as my browser",
+    "description": "First option of the language picker: follow the browser UI language instead of choosing one."
+  },
+  "options_languageHint": {
+    "message": "Chrome has no per-extension language setting, so this one is ours. The extension name shown in chrome://extensions still follows your browser.",
+    "description": "Hint under the language picker, explaining why the setting exists and the one thing it cannot change."
+  },
+  "options_languageLabel": {
+    "message": "Language",
+    "description": "Label of the language picker at the top of the Settings page."
+  },
+  "options_lastSync": {
+    "message": "Last sync",
+    "description": "Row label in the blocklist card; its value is how long ago the list was fetched."
+  },
+  "options_learnHeading": {
+    "message": "Teaching it the block request",
+    "description": "Heading of the card about how the extension learns the shape of the site's own block request."
+  },
+  "options_learnNote": {
+    "message": "Meta rotates its GraphQL <c>doc_id</c>s and gates operations behind generated provider variables, so nothing is hardcoded. The extension reads the live values out of the page. If it reports no block mutation found, the module simply has not been loaded yet — open any profile and block one person by hand. The request is captured and its shape reused from then on.",
+    "description": "Explains why the extension sometimes has to watch a block happen before it can do one. The part inside <c>…</c> is shown as code and is a literal identifier that is not translated; <c> and </c> are not translated either. 'Meta', 'GraphQL' and 'doc_id' are names."
+  },
+  "options_listNotLoaded": {
+    "message": "not loaded yet",
+    "description": "Value of the 'On the list' row before any blocklist has been downloaded."
+  },
+  "options_maxColdHint": {
+    "message": "Active mode only, and counts only accounts you have never seen. <b>Zero</b> means never block anyone who has not appeared on your screen.",
+    "description": "Explains the list-driven hourly cap. The part inside <b>…</b> is shown in bold and refers to the value 0; <b> and </b> are not translated."
+  },
+  "options_maxColdLabel": {
+    "message": "Max list-driven blocks per hour",
+    "description": "Label of the number field capping how many profiles from the ranked list may be blocked in an hour."
+  },
+  "options_maxPerDayLabel": {
+    "message": "Max blocks per day",
+    "description": "Label of the number field capping every block in a day."
+  },
+  "options_maxPerHourLabel": {
+    "message": "Max blocks per hour (all sources)",
+    "description": "Label of the number field capping every block in an hour, whatever it came from."
+  },
+  "options_noneCaptured": {
+    "message": "none captured yet",
+    "description": "Status beside the Forget captured templates button when nothing has been learned."
+  },
+  "options_onTheList": {
+    "message": "On the list",
+    "description": "Row label in the blocklist card; its value is how many profile ids and usernames the list holds."
+  },
+  "options_optional": {
+    "message": "(optional)",
+    "description": "Marks a form field that may be left blank."
+  },
+  "options_paceHeading": {
+    "message": "Pace and ceilings",
+    "description": "Heading of the card holding the delay and per-hour limit numbers."
+  },
+  "options_paceNote": {
+    "message": "Blocking someone whose profile is on your screen is what people do all day; working through a list of strangers is not. The two are budgeted and paced separately, and what ships here is deliberately cautious.",
+    "description": "Explains why there are two separate sets of pacing numbers."
+  },
+  "options_pageTitle": {
+    "message": "Clone Blocker — Settings",
+    "description": "Browser tab title of the settings page. 'Clone Blocker' is the product name and is not translated."
+  },
+  "options_pauseBlocking": {
+    "message": "Pause blocking",
+    "description": "Tick box that stops every real block until it is switched back."
+  },
+  "options_pausedChildrenNote": {
+    "message": "While blocking is paused these two have nothing to act on. They are left editable so you can set them before switching blocking back on.",
+    "description": "Shown under the Pause blocking box when it is ticked, explaining that the two indented controls below it are inert while paused. The rest of the page indents a control to mean 'live when the box above is ticked'; under Pause the sense is reversed, which this says out loud."
+  },
+  "options_pauseHint": {
+    "message": "Stops every real block, whichever box asked for it, until you switch it back. Nothing is lost — queued profiles wait. Hiding, below, is unaffected.",
+    "description": "Explains the Pause blocking tick box. ‘Hiding’ is the separate feature further down that only suppresses content in your own browser."
+  },
+  "options_pausedNote": {
+    "message": "Blocking is paused right now, so neither of these is doing anything. Unpause it under Advanced.",
+    "description": "Warning under the two tick boxes when blocking has been paused, since the pause control lives further down in the collapsed Advanced section."
+  },
+  "options_profileIdMany": {
+    "message": "$1 profile ids",
+    "description": "Part of the 'On the list' value. $1 is how many numeric profile ids the list holds; never 1."
+  },
+  "options_profileIdOne": {
+    "message": "1 profile id",
+    "description": "Part of the 'On the list' value when the list holds exactly one numeric profile id."
+  },
+  "options_ownTab": {
+    "message": "Open a tab of its own to get through the queue <b>(experimental)</b>",
+    "description": "Tick box: let the extension open a background Facebook or Threads tab when it has approved accounts to block and no such tab is open. The part inside <b>…</b> is shown in bold; <b> and </b> are not translated."
+  },
+  "options_ownTabHint": {
+    "message": "Blocking works by driving Facebook's and Threads' own code, and that code only exists inside an open tab — so with no tab open, approved accounts simply wait. With this on, the extension keeps one pinned tab for the job: it opens when there is work and nobody is browsing, and then stays put rather than appearing and vanishing every time the queue fills. Close it whenever you like: it comes back a minute later, waits longer each time you close it again, and after the fifth it switches this option off, so the setting matches what you did. It ships on while the extension is loaded unpacked for development, and off in the published version.",
+    "description": "Explains the experimental self-opening tab, why it exists, and that it is on by default only in development builds."
+  },
+  "options_rawFallback": {
+    "message": "Allow raw request fallback <b>(risky)</b>",
+    "description": "Debugging tick box: let the extension hand-build the block request instead of driving the site's own code. The part inside <b>…</b> is shown in bold; <b> and </b> are not translated."
+  },
+  "options_rawFallbackHint": {
+    "message": "Normally the extension drives the site’s own block code, which is safe and always current. This fallback instead hand-builds the HTTP request. During testing that was observed <b>forcing the signed-in session to log out</b>, and on Threads the REST paths return 404 regardless. Leave this off unless you are debugging.",
+    "description": "Explains why the raw request fallback is off by default. The part inside <b>…</b> is shown in bold and may be moved anywhere in the sentence; <b> and </b> are not translated."
+  },
+  "options_refreshNow": {
+    "message": "Refresh now",
+    "description": "Button in the blocklist card: fetch the list again immediately."
+  },
+  "options_reload": {
+    "message": "Reload",
+    "description": "Button that rebuilds the diagnostics dump."
+  },
+  "options_reportUiEnabled": {
+    "message": "Show the Report chip on profiles",
+    "description": "Tick box that switches the in-page reporting affordance on. 'Report chip' is the small button that appears when you hover a name."
+  },
+  "options_reportingHeading": {
+    "message": "Clone reporting",
+    "description": "Heading of the card controlling the in-page reporting affordance and where reports are sent."
+  },
+  "options_reportingNote": {
+    "message": "Lets people report clone accounts from the page itself. Every report is read by a person, and an approved one goes on the shared blocklist that every copy of the extension follows.",
+    "description": "Note under the reporting section of the options page."
+  },
+  "options_resetQueue": {
+    "message": "Reset queue & stats",
+    "description": "Button that throws away the block queue and all counters. Named inside popup_pausedCheckpoint and activity_haltedResumes, so all three must match."
+  },
+  "options_shareRegion": {
+    "message": "Send my time zone and language, so the list ranks clones operating near me first",
+    "description": "Tick box controlling whether the coarse location signal is sent with the blocklist request."
+  },
+  "options_submitTokenLabel": {
+    "message": "Submit token",
+    "description": "Label of the text field holding a shared secret some report servers require."
+  },
+  "options_submitTokenOnlyIf": {
+    "message": "(only if the server requires one)",
+    "description": "Marks the Submit token field as needed only in one uncommon configuration."
+  },
+  "options_submitTokenPlaceholder": {
+    "message": "--submit-token value",
+    "description": "Greyed-out text inside the empty Submit token field. '--submit-token' is a command-line flag name and is not translated."
+  },
+  "options_tagline": {
+    "message": "Blocks the accounts impersonating you on Facebook and Threads, at a pace that keeps your own account out of trouble.",
+    "description": "One-line summary under the heading at the top of the settings page."
+  },
+  "options_tagsHeading": {
+    "message": "Which kinds get blocked",
+    "description": "Heading of the card that offers one tick box per kind of account."
+  },
+  "options_tagsNoneNote": {
+    "message": "Nothing is ticked, so the extension will not block anyone on its own. Block now in the popup still works.",
+    "description": "Warning shown when no kind is ticked. 'Block now' names the popup's button, so the two must match."
+  },
+  "options_tagsNote": {
+    "message": "Every reviewed profile stays on the list whatever you tick here — and stays hidden too, if hiding is on. Unticking a kind only means the extension will not spend one of your rationed blocks on it.",
+    "description": "Explains that the tick boxes ration real blocks and nothing else."
+  },
+  "options_targetBudgetLabel": {
+    "message": "Targets to take from the list at a time",
+    "description": "Label of the number field setting how many ranked profiles are taken from the list in one batch."
+  },
+  "options_upToDate": {
+    "message": "Already up to date",
+    "description": "Status beside the Refresh now button when the server said nothing had changed."
+  },
+  "options_updated": {
+    "message": "Updated",
+    "description": "Status beside the Refresh now button when a new list was downloaded."
+  },
+  "options_usernameMany": {
+    "message": "$1 usernames",
+    "description": "Part of the 'On the list' value. $1 is how many usernames the list holds; never 1."
+  },
+  "options_usernameOne": {
+    "message": "1 username",
+    "description": "Part of the 'On the list' value when the list holds exactly one username."
+  },
+  "options_warmDelayHint": {
+    "message": "Shorter than the delay below: this is the ordinary case and does not need to be slowed down.",
+    "description": "Explains the on-screen delay range."
+  },
+  "options_warmDelayLabel": {
+    "message": "Delay after blocking someone on screen (seconds)",
+    "description": "Label of the pair of number fields holding the delay range for profiles that were visible on screen. 'ms' is milliseconds."
+  },
+  "options_workHeading": {
+    "message": "How much work it does",
+    "description": "Heading of the first card on the settings page, which holds the two tick boxes for what the extension is allowed to block."
+  },
+  "popup_activityLink": {
+    "message": "Activity",
+    "description": "Footer link in the popup: opens the Activity page. Must match the Activity page's own heading."
+  },
+  "popup_blockButton": {
+    "message": "Block now",
+    "description": "Popup button that queues a real platform block of the profile the tab is showing. Also named inside options_tagsNoneNote, so the two must match."
+  },
+  "popup_blockQueued": {
+    "message": "Queued",
+    "description": "The Block now button once the block has been queued."
+  },
+  "popup_blockQueueing": {
+    "message": "Queueing…",
+    "description": "The Block now button while the request to queue the block is in flight."
+  },
+  "popup_blockingNothingOn": {
+    "message": "Neither kind of blocking is switched on, so nothing is being blocked anywhere. Turn one on in Settings.",
+    "description": "Note in the popup's queue card when both blocking switches -- profiles you run into, and working through the list -- are off, so nothing is blocked at all."
+  },
+  "popup_blockingOffHidden": {
+    "message": "Platform blocking is off, so this profile is hidden but not blocked.",
+    "description": "Note under the popup's buttons when blocking is paused and the open profile is on the blocklist."
+  },
+  "popup_blockingPaused": {
+    "message": "Blocking is paused in Settings, so no tab is doing any of it.",
+    "description": "Note in the popup's queue card when the user has paused blocking entirely and nothing is queued."
+  },
+  "popup_couldNotIdentify": {
+    "message": "Could not identify a profile here.",
+    "description": "Note under the popup's buttons when the page turned out not to name any one profile."
+  },
+  "popup_couldNotQueue": {
+    "message": "Could not queue that block.",
+    "description": "Note under the popup's buttons when queueing a block failed for no reason the extension can name."
+  },
+  "popup_hiddenCountLabel": {
+    "message": "Hidden on this page",
+    "description": "Row label in the popup's second card; its value is how many posts and comments are currently hidden in the open tab."
+  },
+  "popup_listLine": {
+    "message": "$1 on your list · $2",
+    "description": "Footer of the popup. $1 is how many entries the downloaded blocklist has; $2 is how long ago it was last fetched, e.g. '12m ago'."
+  },
+  "popup_listNotLoaded": {
+    "message": "list not loaded",
+    "description": "Footer of the popup before any blocklist has been downloaded."
+  },
+  "popup_listed": {
+    "message": "On your blocklist",
+    "description": "Status line under the profile name in the popup when this profile is on the downloaded blocklist."
+  },
+  "popup_needsProfileId": {
+    "message": "Blocking needs this profile’s numeric ID, which the page has not revealed yet. Scroll the profile once, or report it and let the server resolve it.",
+    "description": "Note under the popup's buttons when this profile is only known by username, and a block needs its numeric id."
+  },
+  "popup_noProfile": {
+    "message": "No profile on this page",
+    "description": "Headline of the popup's action card when the tab is on Facebook or Threads but is not showing any one person's profile."
+  },
+  "popup_noProfileNote": {
+    "message": "Open someone’s profile, or hover any name in the feed and use the Report chip.",
+    "description": "Explains what to do, under the popup headline, when the page is not showing a profile. 'Report chip' is the small button that appears when you hover a name in the feed."
+  },
+  "popup_noTabIdle": {
+    "message": "No Facebook or Threads tab is open. Nothing is waiting, but blocking needs one of those tabs to run in.",
+    "description": "Note in the popup's queue card when no Facebook or Threads tab is open and nothing is queued either."
+  },
+  "popup_noTabMany": {
+    "message": "$1 profiles are waiting and no Facebook or Threads tab is open for them to be blocked in — open one and leave it open.",
+    "description": "Note in the popup's queue card when $1 profiles are waiting and no Facebook or Threads tab is open for them to be blocked in. $1 is never 1."
+  },
+  "popup_noTabOne": {
+    "message": "1 profile is waiting and no Facebook or Threads tab is open for it to be blocked in — open one and leave it open.",
+    "description": "Note in the popup's queue card when exactly one profile is waiting and no Facebook or Threads tab is open for it to be blocked in."
+  },
+  "popup_notListed": {
+    "message": "Not on your blocklist",
+    "description": "Status line under the profile name in the popup when this profile is not on the downloaded blocklist."
+  },
+  "popup_notOnSite": {
+    "message": "This tab isn’t Facebook or Threads",
+    "description": "Headline of the popup's action card when the current tab is some other site. It is a statement about this tab only -- whether blocking is running at all is answered separately, lower down the popup."
+  },
+  "popup_openProfileNote": {
+    "message": "Open a Facebook or Threads profile to report or block it.",
+    "description": "Explains what to do, under the popup headline, when the current tab is not Facebook or Threads."
+  },
+  "popup_pageNotReady": {
+    "message": "Page not ready",
+    "description": "Headline of the popup's action card when the extension is on the right site but its content script has not answered."
+  },
+  "popup_pausedCheckpoint": {
+    "message": "Blocking paused for $1 after an account checkpoint. Resolve it on the site, then use Reset queue & stats in Settings.",
+    "description": "Note in the popup's queue card. $1 is a duration such as '40m' or '6h'. A 'checkpoint' is the security challenge Facebook or Threads puts an account behind. 'Reset queue & stats' names a button in Settings, so the two must match."
+  },
+  "popup_pausedRateLimit": {
+    "message": "Blocking paused for $1 by rate limiting.",
+    "description": "Note in the popup's queue card when blocking is waiting out its own hourly ceiling. $1 is a duration such as '40m'."
+  },
+  "popup_platformLoading": {
+    "message": "loading…",
+    "description": "Small pill at the top right of the popup while the page is still working out which site it is."
+  },
+  "popup_platformUnsupported": {
+    "message": "not a supported site",
+    "description": "Small pill at the top right of the popup when the current tab is neither Facebook nor Threads."
+  },
+  "popup_queueListOffMany": {
+    "message": "$1 of these came from the list, and working through the list is switched off — they stay parked until you switch it back on.",
+    "description": "Note in the popup's queue card when $1 queued profiles came from the ranked list and working through the list is switched off. $1 is never 1."
+  },
+  "popup_queueListOffOne": {
+    "message": "1 of these came from the list, and working through the list is switched off — it stays parked until you switch it back on.",
+    "description": "Note in the popup's queue card when exactly one queued profile came from the ranked list and working through the list is switched off."
+  },
+  "popup_queuePacing": {
+    "message": "Paced in the background — one block at a time, however many tabs are open.",
+    "description": "Note in the popup's queue card when the queue is draining normally. It names the pacing on purpose: someone who opens several tabs expecting several times the speed should learn here why that is not what happens."
+  },
+  "popup_queueParked": {
+    "message": "Blocking is paused, so these stay where they are.",
+    "description": "Note in the popup's queue card when the user has paused blocking and profiles are queued."
+  },
+  "popup_queuedCountLabel": {
+    "message": "Waiting to be blocked",
+    "description": "Row label in the popup's second card; its value is how many profiles are queued for a real block."
+  },
+  "popup_queuedNote": {
+    "message": "Queued — it goes out in a moment, as soon as a Facebook or Threads tab can carry it out.",
+    "description": "Note under the popup's buttons confirming a block was queued."
+  },
+  "popup_refreshFailed": {
+    "message": "refresh failed",
+    "description": "Footer of the popup when a blocklist refresh failed and the server gave no reason."
+  },
+  "popup_refreshLink": {
+    "message": "Refresh",
+    "description": "Footer link in the popup: fetch the blocklist again now."
+  },
+  "popup_refreshing": {
+    "message": "refreshing…",
+    "description": "Footer of the popup while a blocklist refresh is in flight."
+  },
+  "popup_reloadAndRetry": {
+    "message": "Reload the page and try again.",
+    "description": "Note under the popup's buttons when the content script could not be reached to open the report sheet."
+  },
+  "popup_reloadNote": {
+    "message": "Reload the page and open this again.",
+    "description": "Explains what to do, under the popup headline, when the content script did not answer."
+  },
+  "popup_reportAgainButton": {
+    "message": "Report again",
+    "description": "The popup's main button when this profile is already on the blocklist, so a report would be a repeat."
+  },
+  "popup_reportButton": {
+    "message": "Report as a clone",
+    "description": "The popup's main button: files a report about the profile the tab is showing."
+  },
+  "popup_settingsLink": {
+    "message": "Settings",
+    "description": "Footer link in the popup: opens the extension's settings page."
+  },
+  "popup_tabsElsewhereMany": {
+    "message": "Not here — but blocking is running in the $1 Facebook or Threads tabs you have open, one block at a time across all of them, on purpose.",
+    "description": "Note in the popup when the current tab is neither Facebook nor Threads but $1 such tabs are open elsewhere. $1 is never 1."
+  },
+  "popup_tabsElsewhereOne": {
+    "message": "Not here — but blocking is running in the one Facebook or Threads tab you have open.",
+    "description": "Note in the popup when the current tab is neither Facebook nor Threads but exactly one such tab is open elsewhere. It exists to stop the popup reading as 'the extension is idle' when it is not."
+  },
+  "popup_tabsHere": {
+    "message": "Blocking is running in this tab.",
+    "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and is the only such tab open."
+  },
+  "popup_tabsHereAndMany": {
+    "message": "Blocking is running here and in $1 other Facebook or Threads tabs — still one block at a time across all of them, on purpose.",
+    "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and $1 other such tabs are also open. $1 is never 1."
+  },
+  "popup_tabsHereAndOne": {
+    "message": "Blocking is running here and in one other Facebook or Threads tab — still one block at a time across both, on purpose.",
+    "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and exactly one other such tab is open."
+  },
+  "popup_thisIsYou": {
+    "message": "This is you",
+    "description": "Status line under the profile name in the popup when the open profile is the signed-in user's own."
+  },
+  "report_adminReviews": {
+    "message": "A person reads it first. Once it is approved this account joins the shared blocklist, and everyone running Clone Blocker blocks them too.",
+    "description": "Shown in the report sheet, under the reason picker. Says what approval leads to."
+  },
+  "report_alsoBlock": {
+    "message": "Block this profile too",
+    "description": "Tick box in the report sheet, on by default: block the reported account immediately as well as reporting it."
+  },
+  "report_alsoBlockQueued": {
+    "message": "Blocking is paused in Settings, so this will wait in the queue until you switch it back on.",
+    "description": "Shown under the block tick box when platform blocking is paused. The box stays usable: the block is queued, not discarded."
+  },
+  "report_alsoBlockWhenSeen": {
+    "message": "This profile has not shown a numeric ID yet, so it will be blocked the next time it turns up rather than right now.",
+    "description": "Shown under the block tick box when the numeric id is not known yet. The box stays usable: the report carries the username, and the block happens once the profile is on the list and seen again."
+  },
+  "report_buttonLabel": {
+    "message": "Report clone account",
+    "description": "Screen-reader label and tooltip of the report button the extension adds to a Threads post's action row."
+  },
+  "report_cancel": {
+    "message": "Cancel",
+    "description": "Button that closes the report dialog without sending anything."
+  },
+  "report_blockQueued": {
+    "message": "Blocking is queued — it will happen in a moment, as soon as a Facebook or Threads tab can carry it out.",
+    "description": "Shown under the confirmation in the report sheet when the block was accepted but has not finished yet. It must not claim the account is already blocked."
+  },
+  "report_chip": {
+    "message": "Report",
+    "description": "The small button that appears when you hover a name on Facebook or Threads. Keep it short; it has to fit beside a name."
+  },
+  "report_chipBlocked": {
+    "message": "Blocked",
+    "description": "The hover button when this account is already on the blocklist."
+  },
+  "report_chipReported": {
+    "message": "Reported",
+    "description": "The hover button when this account has already been reported and is awaiting review."
+  },
+  "report_chipReportedCount": {
+    "message": "Reported ×$1",
+    "description": "The hover button when this account has been reported more than once. $1 is how many times; '×' is the multiplication sign used here as 'times'."
+  },
+  "report_disclaimer": {
+    "message": "This goes to the Clone Blocker project, not to Facebook or Threads.",
+    "description": "Shown in the report sheet. Names who receives the report."
+  },
+  "report_done": {
+    "message": "Done",
+    "description": "Button that closes the report dialog after a report went through."
+  },
+  "report_iconLabel": {
+    "message": "Report clone",
+    "description": "Screen-reader label of the block icon drawn inside the report button on a Threads post."
+  },
+  "report_noNumericId": {
+    "message": "no numeric id resolved yet",
+    "description": "Shown in the report dialog's identity line when only a username is known for the account."
+  },
+  "report_noPostText": {
+    "message": "(no text in this post)",
+    "description": "Stands in for the quoted post inside the report dialog when the post is only an image or video."
+  },
+  "report_notAProfile": {
+    "message": "This page is not a profile.",
+    "description": "Error returned to the popup when it asks the page to report whoever it is showing and the page shows nobody."
+  },
+  "report_noteLabel": {
+    "message": "Anything that would help a reviewer? (optional)",
+    "description": "Label of the free-text box in the report dialog."
+  },
+  "report_notePlaceholder": {
+    "message": "e.g. copies the photos and bio of @realaccount",
+    "description": "Greyed-out example inside the empty free-text box. '@realaccount' is a made-up handle standing in for the real person being impersonated."
+  },
+  "report_ownProfile": {
+    "message": "That is your own profile.",
+    "description": "Error returned to the popup when it asks the page to report whoever it is showing and that turns out to be the signed-in user."
+  },
+  "report_postLabel": {
+    "message": "Post being reported",
+    "description": "Caption above the quoted post inside the report dialog, when the report was raised from a specific post."
+  },
+  "report_reasonLabel": {
+    "message": "Why are you reporting this account?",
+    "description": "Label of the drop-down of reasons in the report dialog. Its choices are the tag_* messages."
+  },
+  "report_sent": {
+    "message": "Report sent. If it is approved, everyone running Clone Blocker blocks this account too.",
+    "description": "Confirmation after a report is sent without an immediate block."
+  },
+  "report_sheetTitle": {
+    "message": "Report a clone account",
+    "description": "Title bar of the report dialog that opens over the page."
+  },
+  "report_signIn": {
+    "message": "Sign in to $1 before reporting. Reports have to carry the account that filed them.",
+    "description": "Error in the report dialog when nobody is signed in. $1 is 'Facebook' or 'Threads' — a site name, never translated."
+  },
+  "report_submit": {
+    "message": "Send report",
+    "description": "Button that files the report."
+  },
+  "report_unknownProfile": {
+    "message": "Unknown profile",
+    "description": "Stands in for the reported account's name in the report dialog when neither a display name nor a username is known."
+  },
+  "sw_checkpoint": {
+    "message": "Account checkpoint detected. Platform blocking paused; resolve the challenge on the site.",
+    "description": "Error banner in the popup and on the Activity page after Facebook or Threads put the account behind a security challenge."
+  },
+  "sw_fetchFailed": {
+    "message": "Fetch failed: $1",
+    "description": "Error surfaced in the popup when the blocklist download never reached the server. $1 is the browser's own untranslated network error."
+  },
+  "sw_httpStatus": {
+    "message": "Server returned HTTP $1",
+    "description": "Error surfaced in the popup when the blocklist server answered with a failure. $1 is a status code such as 500. 'HTTP' is not translated."
+  },
+  "sw_noBlocklistCached": {
+    "message": "no blocklist cached yet",
+    "description": "Error returned when something asks for the blocklist before one has ever been downloaded."
+  },
+  "sw_noListPermission": {
+    "message": "This browser has no permission for that address. The built-in list address is always permitted, so this only happens when listUrl has been pointed somewhere else.",
+    "description": "Error surfaced in the popup when the blocklist address is outside what the extension may reach. 'listUrl' is a setting name and is not translated."
+  },
+  "sw_noListUrl": {
+    "message": "No blocklist URL configured. Set one in the extension options.",
+    "description": "Error surfaced in the popup and on the Activity page when no blocklist address is set."
+  },
+  "sw_noReportPermission": {
+    "message": "No permission for that address. Reports go to whichever backend listUrl names, and this one is not a permitted origin.",
+    "description": "Error in the report dialog when the report address is outside what the extension may reach. 'listUrl' is a setting name and is not translated."
+  },
+  "sw_noServer": {
+    "message": "No server configured. Set the blocklist URL in options.",
+    "description": "Error in the report dialog when no report address is set at all. 'URL' is not translated."
+  },
+  "sw_notABlocklist": {
+    "message": "Response did not look like a blocklist (wrong URL?)",
+    "description": "Error surfaced in the popup when the blocklist address returned readable data of the wrong shape — usually an error page. 'URL' is not translated."
+  },
+  "sw_notAList": {
+    "message": "Response was neither JSON nor a line-delimited list",
+    "description": "Error surfaced in the popup when the blocklist address returned something unreadable. 'JSON' is not translated."
+  },
+  "sw_serverHttp": {
+    "message": "server returned HTTP $1",
+    "description": "Error in the report dialog when the report server answered with a failure and named no reason. $1 is a status code such as 500. 'HTTP' is not translated."
+  },
+  "sw_serverUnreachable": {
+    "message": "Could not reach the server: $1",
+    "description": "Error in the report dialog when the report never reached the server. $1 is the browser's own untranslated network error."
+  },
+  "sw_signInBefore": {
+    "message": "Sign in to $1 before reporting.",
+    "description": "Error in the report dialog when nobody is signed in. $1 is 'Facebook' or 'Threads' — a site name, never translated."
+  },
+  "sw_signInGeneric": {
+    "message": "Sign in before reporting.",
+    "description": "Error in the report dialog when the server refused the report for want of a signed-in account and named no site."
+  },
+  "sw_notReady": {
+    "message": "No way to reach the site's block operation yet, so nothing was attempted: it is not loaded on this page, no ID is published with the list, and this browser has not seen one before. Open any profile's \"…\" menu, choose Block, then Cancel — that teaches it and blocks nobody, because the dialog asks first.",
+    "description": "Status line in the popup and on the Activity page when a queued block could not even be tried because the page has not loaded the site's own block operation and raw fallbacks are off. Nothing was sent; the target stays queued."
+  },
+  "sw_signedOutPaused": {
+    "message": "Signed out of the site — platform blocking paused. Sign in again, then resume.",
+    "description": "Error banner in the popup and on the Activity page after a block failed because nobody is signed in to Facebook or Threads."
+  },
+  "tag_clone": {
+    "message": "Clone / fake account",
+    "description": "Kind of account. Offered as a reason in the in-page report sheet, as a tick box under 'Which kinds get blocked' in Settings, and as a chip on the Activity page."
+  },
+  "tag_harassment": {
+    "message": "Harassment",
+    "description": "Kind of account: targeted abuse. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_impersonation": {
+    "message": "Impersonating someone",
+    "description": "Kind of account: pretending to be a specific named person. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_other": {
+    "message": "Something else",
+    "description": "Kind of account: the bucket of last resort, for anything the other kinds do not cover. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_redbull": {
+    "message": "Redbull",
+    "description": "Kind of account: a state-aligned troll. English uses the loanword Redbull; Vietnamese uses the slang it comes from, Bo do (with diacritics). Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_scam": {
+    "message": "Scam or fraud",
+    "description": "Kind of account: after money or credentials. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_spam": {
+    "message": "Spam",
+    "description": "Kind of account: bulk unwanted posting. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "time_daysAgo": {
+    "message": "$1d ago",
+    "description": "How long ago something happened, in days. $1 is a whole number. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_hours": {
+    "message": "$1h",
+    "description": "A duration in hours, counting forward, e.g. how long blocking stays paused after a checkpoint. $1 is a whole number."
+  },
+  "time_hoursAgo": {
+    "message": "$1h ago",
+    "description": "How long ago something happened, in hours. $1 is a whole number under 24. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_minutes": {
+    "message": "$1m",
+    "description": "A duration in minutes, counting forward, e.g. how long blocking stays paused. $1 is a whole number."
+  },
+  "time_minutesAgo": {
+    "message": "$1m ago",
+    "description": "How long ago something happened, in minutes. $1 is a whole number under 60. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_never": {
+    "message": "never",
+    "description": "Stands in for a timestamp that has never happened, e.g. as the value of 'Last sync' in Settings before the first refresh."
+  },
+  "time_seconds": {
+    "message": "$1s",
+    "description": "A duration in seconds, counting forward, e.g. how long until a queued profile is retried. $1 is a whole number under 60."
+  },
+  "time_secondsAgo": {
+    "message": "$1s ago",
+    "description": "How long ago something happened, in seconds. $1 is a whole number under 60. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "welcome_aside": {
+    "message": "From then on it keeps going on its own: accounts already on the list get blocked as you come across them, and the rest are worked through slowly in the background. The toolbar icon says what it has done on the page you are looking at — pin it if you want it close by.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_heading": {
+    "message": "Clone Blocker is on.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_later": {
+    "message": "Everything else — how fast it works, what it hides, whose list it follows — lives in Settings. You do not need any of it yet.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_lede": {
+    "message": "Nothing to set up. There is one thing worth learning, and this is it: how to block somebody.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_openFacebook": {
+    "message": "Open Facebook",
+    "description": "Button on the welcome page."
+  },
+  "welcome_openThreads": {
+    "message": "Open Threads",
+    "description": "Button on the welcome page."
+  },
+  "welcome_pageTitle": {
+    "message": "Clone Blocker",
+    "description": "Browser tab title of the welcome page."
+  },
+  "welcome_settingsLink": {
+    "message": "Settings",
+    "description": "Link to the options page from the welcome page."
+  },
+  "welcome_sharedBody": {
+    "message": "Every report goes to a person who reads it. Once it is approved, that account joins the shared blocklist — and everyone running Clone Blocker blocks them too. One report, and the herd is one smaller for all of us.",
+    "description": "Body of the shared-blocklist callout on the welcome page. This is the key feature."
+  },
+  "welcome_sharedTitle": {
+    "message": "And it does not stop with you",
+    "description": "Heading of the shared-blocklist callout on the welcome page."
+  },
+  "welcome_step1Body": {
+    "message": "Open their profile on Facebook or Threads — or just find one of their posts in your feed.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step1Title": {
+    "message": "Find them",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step2Body": {
+    "message": "Clone Blocker adds it next to Share on posts, and beside profile links. Pick a reason — Bò đỏ is first in the list — and send.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step2Caption": {
+    "message": "This button.",
+    "description": "Caption beside a drawing of the block button on the welcome page."
+  },
+  "welcome_step2Title": {
+    "message": "Click the block button",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step3Body": {
+    "message": "“Block this profile too” is already ticked, so the block goes out straight away — through Facebook’s or Threads’ own block, exactly as if you had done it by hand.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step3Title": {
+    "message": "That is the block done",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "list_searchPlaceholder": {
+    "message": "Search",
+    "description": "Placeholder in the search box above a long list on the Activity page."
+  },
+  "list_sortBy": {
+    "message": "Sort by",
+    "description": "Accessible name of the sort menu above a long list."
+  },
+  "list_reverse": {
+    "message": "Reverse the order",
+    "description": "Tooltip on the button that flips a list between ascending and descending."
+  },
+  "list_showing": {
+    "message": "Showing $1–$2 of $3",
+    "description": "Above a paged list. $1 and $2 are the first and last row numbers on this page, $3 the total that match."
+  },
+  "list_noMatch": {
+    "message": "Nothing matches — $1 hidden",
+    "description": "Shown instead of the count when a search matches nothing. $1 is how many rows the list holds."
+  },
+  "list_page": {
+    "message": "Page $1 of $2",
+    "description": "In the pager under a long list. $1 is the current page, $2 the last."
+  },
+  "list_first": {
+    "message": "First page",
+    "description": "Tooltip on the pager button that jumps to the first page."
+  },
+  "list_prev": {
+    "message": "Previous page",
+    "description": "Tooltip on the pager button that goes back one page."
+  },
+  "list_next": {
+    "message": "Next page",
+    "description": "Tooltip on the pager button that goes forward one page."
+  },
+  "list_last": {
+    "message": "Last page",
+    "description": "Tooltip on the pager button that jumps to the last page."
+  },
+  "list_sortPriority": {
+    "message": "Order they will be blocked",
+    "description": "Sort option for the waiting queue: the order the extension will actually work through it."
+  },
+  "list_sortWaiting": {
+    "message": "Waiting longest",
+    "description": "Sort option for the waiting queue: whichever has been queued longest."
+  },
+  "list_sortName": {
+    "message": "Name",
+    "description": "Sort option: alphabetical by the account name shown on the row."
+  },
+  "list_sortPlatform": {
+    "message": "Platform",
+    "description": "Sort option: group Facebook and Threads rows together."
+  },
+  "list_sortNewest": {
+    "message": "Most recent",
+    "description": "Sort option for the history: newest attempt first."
+  },
+  "list_sortOutcome": {
+    "message": "Outcome",
+    "description": "Sort option for the history: group blocked, failed and dry-run attempts together."
+  },
+  "activity_retry": {
+    "message": "Retry",
+    "description": "Button on a waiting queue row: try this account again now, clearing any wait after a failure."
+  },
+  "activity_retryAll": {
+    "message": "Retry all",
+    "description": "Button above the waiting queue: clear the wait on every queued account so they are all tried again."
+  },
+  "activity_retryDone": {
+    "message": "$1 cleared to try again",
+    "description": "Confirmation after Retry all. $1 is how many queued accounts had their wait cleared."
+  },
+  "activity_retryNone": {
+    "message": "Nothing was waiting on a retry",
+    "description": "Confirmation after Retry all when no queued account was in a cooldown."
+  },
+  "list_pagesLabel": {
+    "message": "Pages",
+    "description": "Accessible name of the pager under a long list, read aloud by a screen reader."
+  },
+  "sw_reportBusy": {
+    "message": "The server is busy right now. Your report is saved and will be sent again shortly.",
+    "description": "Shown when the backend rate limits or closes intake; the report is queued."
+  },
+  "sw_reportQueued": {
+    "message": "Saved. It will be sent as soon as the server can be reached.",
+    "description": "Shown when a report could not be sent yet and was kept for retry."
+  },
+  "sw_badSignature": {
+    "message": "The blocklist could not be verified and was ignored.",
+    "description": "A fetched blocklist carried a signature that did not verify, or a mirror served an unsigned one."
+  },
+  "popup_blocking": {
+    "message": "Blocking…",
+    "description": "The Block now button while the block is actually being carried out."
+  },
+  "popup_blockingNote": {
+    "message": "Waiting for the block to go through, then this page reloads.",
+    "description": "Shown under the Block now button while the popup waits for the block to land."
+  },
+  "alerts_badgeTitle": {
+    "message": "$1 action(s) did not go through",
+    "description": "Toolbar icon tooltip when there are failed actions."
+  },
+  "activity_alertsHeading": {
+    "message": "Did not go through",
+    "description": "Heading for the list of failed actions on the activity page."
+  },
+  "activity_alertsDismiss": {
+    "message": "Dismiss",
+    "description": "Button clearing the failed-action alerts."
+  },
+  "activity_alertsOne": {
+    "message": "1 thing you asked for did not happen.",
+    "description": "Failed-action summary, singular."
+  },
+  "activity_alertsMany": {
+    "message": "$1 things you asked for did not happen.",
+    "description": "Failed-action summary, plural. $1 is a count."
+  },
+  "report_blockThenReload": {
+    "message": "Blocking now — this page will reload when it goes through.",
+    "description": "Shown after reporting from the account's own profile page, when a block was also asked for and the page will reload once it lands."
+  }
+}

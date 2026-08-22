@@ -1,0 +1,101 @@
+/*
+ * Suppression styles.
+ *
+ * Driven by attributes rather than injected inline styles: React reconciliation
+ * routinely overwrites the style property on nodes it owns, but it leaves
+ * unknown data-* attributes alone, so an attribute selector survives re-renders
+ * that an inline style would not.
+ *
+ * `data-cb-hidden="revealed"` is the escape hatch the placeholder's Show button
+ * sets; it deliberately matches none of the hiding rules.
+ */
+
+[data-cb-hidden="1"][data-cb-mode="collapse"] {
+  display: none !important;
+}
+
+[data-cb-hidden="1"][data-cb-mode="blur"] {
+  filter: blur(14px) saturate(0.4) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  transition: filter 120ms ease-out;
+}
+
+[data-cb-hidden="1"][data-cb-mode="placeholder"] {
+  display: none !important;
+}
+
+.cb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.08);
+  font: 500 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.cb-placeholder-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cb-placeholder-btn {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cb-placeholder-btn:hover {
+  background: rgba(128, 128, 128, 0.16);
+}
+
+/* ---------------------------------------------------------------------------
+ * Dismissing a post you have just reported.
+ *
+ * Separate from the hide states above, and deliberately so. Those are a
+ * standing judgement about an account -- reversible, re-applied on every
+ * rescan, owned by the blocklist. This is a one-off acknowledgement of
+ * something the reader just did: they pressed Block on this post, and it
+ * should go, now, whether or not the block has landed yet and whether or not
+ * hiding is even switched on.
+ *
+ * The animation exists because the alternative is a post vanishing between one
+ * frame and the next, which reads as a glitch rather than as a response. It is
+ * short enough not to be in the way and long enough to be seen.
+ */
+[data-cb-dismissing="1"] {
+  overflow: hidden !important;
+  pointer-events: none !important;
+  animation: cb-dismiss 300ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes cb-dismiss {
+  from { opacity: 1; transform: none; }
+  60%  { opacity: 0; transform: translateX(-6%); }
+  to   { opacity: 0; transform: translateX(-6%);
+         max-height: 0; margin-top: 0; margin-bottom: 0;
+         padding-top: 0; padding-bottom: 0; border-width: 0; }
+}
+
+/* Once it has finished, it is simply gone: the animation's end state is only
+ * held while the animation is on the element, and a rescan or a React re-render
+ * could otherwise bring it back mid-collapse. */
+[data-cb-dismissed="1"] { display: none !important; }
+
+/* Somebody who has asked for less motion still gets the post out of the way --
+ * they asked not to be animated at, not to be ignored. */
+@media (prefers-reduced-motion: reduce) {
+  [data-cb-dismissing="1"] { animation-duration: 1ms; }
+}

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="appName">Clone Blocker</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body class="popup">
+  <header class="hd">
+    <h1 data-i18n="appName"></h1>
+    <span id="platform" class="pill">—</span>
+  </header>
+
+  <!-- What this page is, and what you can do about it. Everything else on this
+       popup is subordinate to this card. -->
+  <section class="card" id="pageCard">
+    <div id="who" class="who">—</div>
+    <div id="whoState" class="state"></div>
+
+    <button id="reportProfile" class="btn primary" data-i18n="popup_reportButton"></button>
+    <button id="blockProfile" class="btn hidden" data-i18n="popup_blockButton"></button>
+    <p class="note" id="actionNote"></p>
+  </section>
+
+  <!-- What it did here, and what it still has to do. The hide toggle used to
+       live in this card; hiding is an off-by-default extra now, so Settings
+       owns it and the popup keeps to the work that is actually in flight. -->
+  <section class="card">
+    <div class="row">
+      <span class="k" data-i18n="popup_hiddenCountLabel"></span>
+      <span class="v" id="hiddenCount">—</span>
+    </div>
+    <div class="row">
+      <span class="k" data-i18n="popup_queuedCountLabel"></span>
+      <span class="v" id="queuedCount">—</span>
+    </div>
+    <!-- Two different questions, and they used to be answered as one. This
+         first line is "is blocking working" -- which is about whether ANY
+         Facebook or Threads tab is open, not about the tab in front of you.
+         The second is "what is holding the queue up". -->
+    <p class="note" id="tabsNote"></p>
+    <p class="note" id="blockingNote"></p>
+    <div id="blockError" class="err hidden"></div>
+  </section>
+
+  <footer>
+    <span id="listLine" class="foot-note">—</span>
+    <span class="foot-links">
+      <a href="#" id="refresh" data-i18n="popup_refreshLink"></a>
+      <a href="#" id="openActivity" data-i18n="popup_activityLink"></a>
+      <a href="#" id="openOptions" data-i18n="popup_settingsLink"></a>
+    </span>
+  </footer>
+
+  <script src="../common/i18n.js"></script>
+  <script src="../common/protocol.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
