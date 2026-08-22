@@ -2,11 +2,8 @@
 
 **Tiếng Việt** · [English](README.en.md)
 
-Có người sao chép tài khoản Facebook hoặc Threads của bạn — ảnh của bạn, tên của
-bạn, tiểu sử của bạn — rồi dùng nó để hỏi vay tiền bạn bè bạn. Bạn chặn họ. Một
-tuần sau lại có thêm ba tài khoản nữa.
-
-Clone Blocker chặn giúp bạn, và mọi người khác đang dùng nó cũng chặn luôn.
+Chặn không xuể lũ clone, bot, bò đỏ? Đã có Clone Blocker.
+Tiện ích này sẽ tải danh sách clone từ nguồn dữ liệu được đóng góp bởi cộng đồng (và chính bạn), sau đó sẽ từ từ block tất cả giúp bạn một cách tự động mà không cần làm tay từng cái một.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/clone-blocker/mlkbihlabbmjdhmadjkijioafknfnmaj"><b>Cài đặt — miễn phí</b></a>
