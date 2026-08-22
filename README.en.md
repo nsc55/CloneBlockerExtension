@@ -115,14 +115,14 @@ The full policy is [PRIVACY.md](PRIVACY.md), and it is written to be read.
 |---|---|
 | [How blocking works](docs/BLOCKING.md) | Driving the site's own code, which identifier is used, and working the queue with no tab open |
 | [Choosing whom to block first](docs/RANKING.md) | Ranking, entirely inside your browser |
-| [The backend (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | A small REST server, and why the busiest path never touches it |
-| [Moderation (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | The dashboard and the queue behind it |
 | [Architecture](docs/ARCHITECTURE.md) | How the pieces fit, and where each file lives |
 | [Development](docs/DEVELOPMENT.md) | Tests, and how a release is built |
-| [Running your own list (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | Point it at your own server instead |
 | [Research](docs/RESEARCH.md) | Why no SDK, and what is used instead |
-| [Security review (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | Written to be read by strangers |
 | [Changelog](CHANGELOG.md) | What changed and when |
+
+The server and the moderation dashboard are not open source, so their
+documentation is not public. Everything that runs in your browser is in
+this repository.
 
 No Facebook or Threads SDK, and no Graph API. It works by using the sites' own
 internal JavaScript — the module registry, the Relay runtime and the Relay store

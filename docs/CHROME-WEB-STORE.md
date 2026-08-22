@@ -257,7 +257,7 @@ hay Threads.
 reporter is ever published" was left out of the first draft because it was
 false: `blocklist/current` is world-readable, and it carried per-target counts
 of the timezones, languages and dates its reporters reported from
-([`SECURITY-REVIEW.md` (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) §2.1) and the display name of every
+(the security review, §2.1, in the private backend repository) and the display name of every
 approved account, without the publication opt-in the privacy policy promises
 (§2.2). Both were closed on 22 August 2026 — the list now carries names without
 counts, a week instead of a day, and a name only where the public page carries

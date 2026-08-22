@@ -118,14 +118,14 @@ Tài liệu kỹ thuật viết bằng tiếng Anh:
 |---|---|
 | [Cơ chế chặn](docs/BLOCKING.md) | Điều khiển chính mã của trang, dùng định danh nào, và xử lý hàng đợi khi không có tab nào mở |
 | [Chặn ai trước](docs/RANKING.md) | Xếp hạng, hoàn toàn bên trong trình duyệt của bạn |
-| [Máy chủ (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | Một máy chủ REST nhỏ, và vì sao đường đi bận rộn nhất không hề chạm tới nó |
-| [Kiểm duyệt (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | Bảng điều khiển và hàng đợi phía sau nó |
 | [Kiến trúc](docs/ARCHITECTURE.md) | Các mảnh ghép nối với nhau ra sao, và từng tệp nằm ở đâu |
 | [Phát triển](docs/DEVELOPMENT.md) | Kiểm thử, và cách dựng một bản phát hành |
-| [Tự chạy danh sách riêng (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | Trỏ tiện ích sang máy chủ của bạn |
 | [Nghiên cứu](docs/RESEARCH.md) | Vì sao không dùng SDK, và dùng gì thay thế |
-| [Rà soát bảo mật (private backend repo)](https://github.com/nsc55/CloneBlockerBackend) | Viết để người ngoài đọc được |
 | [Nhật ký thay đổi](CHANGELOG.md) | Thay đổi gì và khi nào |
+
+Máy chủ và bảng kiểm duyệt không phải mã nguồn mở, nên tài liệu của
+chúng không công khai. Mọi thứ chạy trong trình duyệt của bạn đều nằm
+trong kho này.
 
 Không dùng SDK của Facebook hay Threads, cũng không dùng Graph API. Tiện ích hoạt
 động bằng cách dùng chính JavaScript nội bộ của hai trang — sổ đăng ký module,
