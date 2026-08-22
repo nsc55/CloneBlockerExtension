@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "__MSG_appName__",
-  "default_locale": "en",
-  "version": "1.0.1",
+  "default_locale": "vi",
+  "version": "1.0.2",
   "description": "__MSG_appDesc__",
-  "homepage_url": "https://cloneblocker.tree55.com",
+  "homepage_url": "https://tree55.com",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -14,7 +14,7 @@
     "https://*.facebook.com/*",
     "https://*.threads.net/*",
     "https://*.threads.com/*",
-    "https://cloneblocker.tree55.com/*"
+    "https://*.tree55.com/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",

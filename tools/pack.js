@@ -287,10 +287,27 @@ const present = new Set(files);
 // ---- the list it will actually talk to -------------------------------------
 {
   const proto = fs.readFileSync(path.join(ROOT, 'src', 'common', 'protocol.js'), 'utf8');
-  const m = proto.match(/const LIST_URL\s*=\s*\n?\s*'([^']+)'/);
-  report(!!m && /^https:\/\//.test(m[1]), 'the built-in list URL is https', m ? m[1] : 'not found');
-  report(!!m && !/localhost|127\.0\.0\.1|demo-/.test(m[1]),
-    'and points at production', m ? m[1] : '');
+
+  // Resolved, not matched as one literal.
+  //
+  // This looked for `const LIST_URL = 'https://...'`, and the address has not
+  // been written that way since the backend moved off Firebase -- it is a
+  // BACKEND constant plus a path. So the match found nothing and both
+  // assertions reported 'not found', which fails the build. A check that
+  // cannot see the value it guards is worse than no check at all: it blocks a
+  // release that is fine, and it would have been just as blind to one that
+  // was not.
+  const base = /const BACKEND\s*=\s*'([^']+)'/.exec(proto);
+  const direct = /const LIST_URL\s*=\s*'([^']+)'/.exec(proto);
+  const joined = /const LIST_URL\s*=\s*BACKEND\s*\+\s*'([^']+)'/.exec(proto);
+  const listUrl = direct ? direct[1]
+    : (base && joined) ? base[1] + joined[1]
+    : null;
+
+  report(!!listUrl && /^https:\/\//.test(listUrl),
+    'the built-in list URL is https', listUrl || 'not found');
+  report(!!listUrl && !/localhost|127\.0\.0\.1|demo-/.test(listUrl),
+    'and points at production', listUrl || '');
 }
 
 if (failed) {

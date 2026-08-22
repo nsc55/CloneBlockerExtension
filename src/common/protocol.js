@@ -238,18 +238,35 @@
     /**
      * Which language the extension's own pages speak.
      *
-     * 'auto' means whatever the browser is set to, which is what chrome.i18n
-     * does on its own and is right for almost everybody. The override exists
-     * because it is NOT right for everybody: plenty of people run an
-     * English-language Chrome and would rather read Vietnamese, and Chrome
-     * offers no per-extension language control -- changing it means changing
-     * the whole browser and restarting it.
+     * Vietnamese, not 'auto'. This shipped as 'auto' -- whatever the browser
+     * is set to, which is what chrome.i18n does on its own -- and 'auto' is
+     * the right default for an extension whose users are anybody. This one's
+     * users are Vietnamese people reporting accounts that impersonate
+     * Vietnamese public figures, and a great many of them run an
+     * English-language Chrome because that is what came with the machine.
+     * Following the browser served those people English, which is the wrong
+     * language for every one of them.
      *
-     * One thing the override cannot reach: the extension's name and
-     * description in chrome://extensions and the Web Store come from the
-     * manifest, which Chrome resolves before any of our code runs.
+     * Chrome offers no per-extension language control, so 'auto' left them no
+     * way out short of changing the whole browser and restarting it. That is
+     * the reason the override exists at all; making it the default is the
+     * same argument taken one step further.
+     *
+     * Anyone this is wrong for changes it once, in options, and is remembered
+     * -- including back to 'auto'. Existing installs are untouched: a stored
+     * setting wins over this, so this only decides what a NEW install starts
+     * with.
+     *
+     * One thing neither this nor the override can reach: the extension's name
+     * and description in chrome://extensions and the Web Store come from the
+     * manifest, which Chrome resolves before any of our code runs. That is
+     * what default_locale in manifest.json is for, and it is 'vi' for the
+     * same reason this is.
      */
-    uiLanguage: 'auto',      // 'auto' | 'en' | 'vi'
+    // i18n.js owns this value -- see DEFAULT_LANG there for why it cannot
+    // live only here. The literal is a fallback for the Node harnesses, which
+    // read this file with no extension around it.
+    uiLanguage: globalThis.CB_DEFAULT_LANG || 'vi',   // 'auto' | 'en' | 'vi'
 
     reportUiEnabled: true,   // the in-page report affordance on profiles
     // Reporting and blocking are usually the same intent: the person filing

@@ -33,6 +33,23 @@
   const SUPPORTED = ['en', 'vi'];
 
   /**
+   * What this build speaks when nobody has chosen yet.
+   *
+   * It lives HERE rather than only in DEFAULT_SETTINGS, and that is the whole
+   * point. Nothing on this path goes through getSettings(): the loader below
+   * reads chrome.storage directly, because it has to run before the first
+   * paint and the service worker may not even be awake. So a default declared
+   * only in DEFAULT_SETTINGS is a default the language loader never sees, and
+   * a fresh install would quietly follow the browser however the settings file
+   * was written. That is exactly the bug this constant fixes.
+   *
+   * protocol.js reads it back out of globalThis for DEFAULT_SETTINGS, so the
+   * picker in options and the language actually painted agree by construction
+   * rather than by two files being edited together.
+   */
+  const DEFAULT_LANG = 'vi';
+
+  /**
    * Chrome's own substitution, reimplemented for the override path only.
    * getMessage does this for us when it is doing the lookup; when we are, the
    * $1 placeholders still have to be filled or every message with an argument
@@ -173,6 +190,7 @@
   globalThis.CB_LOAD_LOCALE = load;
   globalThis.CB_LOCALE = current;
   globalThis.CB_LOCALES = SUPPORTED.slice();
+  globalThis.CB_DEFAULT_LANG = DEFAULT_LANG;
 
   // Extension pages only. This file also runs as a content script at
   // document_start, and there the document belongs to Facebook or Threads:
@@ -186,7 +204,12 @@
       // language and then visibly rewrites itself in another.
       try {
         const got = await chrome.storage.sync.get('settings');
-        await load(((got && got.settings) || {}).uiLanguage);
+        // Absent means nobody has chosen, which is what a fresh install looks
+        // like -- and it takes DEFAULT_LANG, not the browser. A stored 'auto'
+        // is a CHOICE to follow the browser and is left alone: it is truthy,
+        // so it never reaches the fallback.
+        const chosen = ((got && got.settings) || {}).uiLanguage;
+        await load(chosen || DEFAULT_LANG);
       } catch (e) { /* no storage access here: the browser's language stands */ }
       // Says what the page is actually written in, which is what spellcheck,
       // hyphenation and a screen reader's voice all key off.

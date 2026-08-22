@@ -139,10 +139,40 @@ function buildExt() {
   const b = JSON.parse(before);
   check('the welcome page offers a Vietnamese option', b.picker && b.options.includes('vi'),
     JSON.stringify(b.options));
-  check('and starts in the browser language (English here)', b.heading === enHeading,
-    JSON.stringify(b.heading));
+  // The browser running this harness is English. A fresh install speaks
+  // Vietnamese anyway, which is the point of DEFAULT_LANG: the users this is
+  // built for overwhelmingly run an English-language Chrome.
+  check('and starts in Vietnamese even though the browser is English',
+    b.heading === viHeading, JSON.stringify(b.heading));
 
-  // Drive the picker exactly as a person would: set the value, fire change.
+  const pick = async (lang) => {
+    await ev(w.sessionId, `
+      (async () => {
+        const sel = document.getElementById('uiLanguage');
+        sel.value = '${lang}';
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        return 1;
+      })()`);
+    await sleep(1600);
+    return JSON.parse(await ev(w.sessionId, `
+      JSON.stringify({
+        heading: (document.querySelector('[data-i18n="welcome_heading"]')||{}).textContent,
+        lede: (document.querySelector('[data-i18n="welcome_lede"]')||{}).textContent,
+        lang: document.documentElement.lang,
+        picker: (document.getElementById('uiLanguage')||{}).value,
+        step1: (document.querySelector('[data-i18n="welcome_step1Title"]')||{}).textContent
+      })`));
+  };
+
+  // English first. Switching TO Vietnamese would now prove nothing about the
+  // picker, because that is where the page already was.
+  const toEn = await pick('en');
+  check('choosing English actually switches the page', toEn.heading === enHeading,
+    JSON.stringify(toEn.heading));
+  check('and the whole page switches, not just one line',
+    toEn.lede === enM.welcome_lede.message && toEn.step1 === enM.welcome_step1Title.message,
+    JSON.stringify((toEn.step1 || '').slice(0, 40)));
+
   await ev(w.sessionId, `
     (async () => {
       const sel = document.getElementById('uiLanguage');
@@ -160,7 +190,7 @@ function buildExt() {
       picker: (document.getElementById('uiLanguage')||{}).value,
       step1: (document.querySelector('[data-i18n="welcome_step1Title"]')||{}).textContent
     })`));
-  check('choosing Tiếng Việt actually switches the page', after.heading === viHeading,
+  check('and choosing Tiếng Việt switches it back', after.heading === viHeading,
     JSON.stringify(after.heading));
   check('the whole page switches, not just one line',
     after.lede === vi.welcome_lede.message && after.step1 === vi.welcome_step1Title.message,

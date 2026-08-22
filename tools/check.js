@@ -173,9 +173,15 @@ if (manifest) {
     'i18n.js then protocol.js lead the isolated bundle',
     iso ? (iso.js || []).slice(0, 2).join(', ') : 'no isolated entry');
 
-  report(manifest.default_locale === 'en' &&
+  // Not pinned to a particular language any more. What has to be true is that
+  // the declared default HAS a dictionary -- Chrome falls back to it for every
+  // browser language without one, and the store reads the listing's default
+  // name and description through it, so a default_locale with no messages.json
+  // behind it is an empty listing. Which language it is, is a decision; that it
+  // resolves is the invariant.
+  report(!!manifest.default_locale &&
     fs.existsSync(path.join(ROOT, '_locales', manifest.default_locale, 'messages.json')),
-    'default_locale is en and _locales/en/messages.json exists',
+    'default_locale has a dictionary',
     manifest.default_locale || 'unset');
 
   const minChrome = parseInt(manifest.minimum_chrome_version, 10);
