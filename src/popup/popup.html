@@ -19,6 +19,13 @@
 
     <button id="reportProfile" class="btn primary" data-i18n="popup_reportButton"></button>
     <button id="blockProfile" class="btn hidden" data-i18n="popup_blockButton"></button>
+    <!-- Which button reaches a moderator. Block queues a platform-level block
+         and sends NOTHING to the server; only the report sheet does. The two
+         sat side by side saying neither, so pressing Block and later finding
+         nothing in the queue was the expected outcome and looked like a bug.
+         Deliberately not fixed by having Block file a report: that would put a
+         public accusation on the server that the person never chose to make. -->
+    <p class="note hidden" id="blockOnlyNote" data-i18n="popup_blockIsLocal"></p>
     <p class="note" id="actionNote"></p>
   </section>
 

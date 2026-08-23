@@ -2635,12 +2635,35 @@ async function submitReport(payload, opts) {
   // happened. One scheme, in one function, used by both.
   const key = reportKeyFor(payload.platform, payload.profileId, payload.username);
   const cache = await getLocal(KEYS.REPORTED, {});
-  cache[key] = { status: json.held ? 'held' : 'pending', count: 1,
-                 blocked: false, at: Date.now() };
+  const prev = cache[key] || {};
+  cache[key] = {
+    status: json.held ? 'held' : 'pending',
+    count: 1,
+    // CARRIED, not reset. This was a hardcoded false, which downgraded a
+    // known-blocked account to unblocked for the ten minutes this cache
+    // lives -- so reporting an account that was already on the list made the
+    // chip on that profile stop saying "Blocked", which reads as the report
+    // having undone something.
+    blocked: prev.blocked === true,
+    // Whether THIS browser has filed against this target, kept apart from
+    // `status` because status becomes 'approved' once the account is on the
+    // list and that answers a different question. The sheet needs this one:
+    // "is it blocked" and "did you report it" have different consequences for
+    // whether sending again is worth anything.
+    mine: true,
+    // What the server actually did with it. The dedup rule is one report per
+    // pseudonym per target, so a repeat comes back 200 with duplicate: true
+    // and NOTHING IS WRITTEN. This flag was already on the wire and nothing
+    // read it, so a discarded report was cached as an ordinary pending one --
+    // which is how a report that never existed came to look exactly like a
+    // report that landed.
+    duplicate: !!json.duplicate,
+    at: Date.now()
+  };
   await setLocal(KEYS.REPORTED, cache);
 
   return { ok: true, key, status: json.held ? 'held' : 'pending',
-           count: 1, duplicate: !!json.duplicate };
+           count: 1, mine: true, duplicate: !!json.duplicate };
 }
 
 const STATUS_TTL_MS = 10 * 60 * 1000;
@@ -2650,7 +2673,9 @@ async function reportStatus(q, force) {
   const cache = await getLocal(KEYS.REPORTED, {});
   const hit = cache[key];
   if (!force && hit && (Date.now() - hit.at) < STATUS_TTL_MS) {
-    return { ok: true, key, cached: true, status: hit.status, count: hit.count, blocked: hit.blocked };
+    return { ok: true, key, cached: true, status: hit.status, count: hit.count,
+             blocked: hit.blocked, mine: hit.mine === true,
+             duplicate: hit.duplicate === true };
   }
 
   // Two different questions, answered from two different places, and neither
@@ -2678,7 +2703,8 @@ async function reportStatus(q, force) {
 
   // Nothing to ask, or nobody to ask as: the local answer is the answer.
   if (!base || !reporter || !(await hasHostPermission(base + '/'))) {
-    return { ok: true, key, status: localStatus, count: hit ? hit.count || 0 : 0, blocked };
+    return { ok: true, key, status: localStatus, count: hit ? hit.count || 0 : 0,
+             blocked, mine: !!(hit && hit.mine), duplicate: !!(hit && hit.duplicate) };
   }
 
   // The same hashed value the report was filed under -- asking with the raw
@@ -2694,15 +2720,25 @@ async function reportStatus(q, force) {
     // A lookup failure must never stop someone reporting, and must never
     // downgrade a fact we already hold.
     return { ok: true, key, status: localStatus, count: hit ? hit.count || 0 : 0,
-             blocked, offline: true };
+             blocked, mine: !!(hit && hit.mine), duplicate: !!(hit && hit.duplicate),
+             offline: true };
   }
   const mine = ((json && json.reports) || [])
     .find(r => r.platform === q.platform && String(r.id) === pid);
   const rec = { status: blocked ? 'approved' : (mine ? mine.status : localStatus),
                 count: mine ? 1 : (hit ? hit.count || 0 : 0),
-                blocked, at: Date.now() };
+                blocked,
+                // The server answering about our own pseudonym is proof this
+                // browser reported it; so is a local record from a previous
+                // submit. Either is enough, and neither may erase the other --
+                // the server forgets a report once the case is decided, and
+                // that must not turn into "you never reported this".
+                mine: !!(mine || (hit && hit.mine)),
+                duplicate: !!(hit && hit.duplicate),
+                at: Date.now() };
   cache[key] = rec;
   await setLocal(KEYS.REPORTED, cache);
-  return { ok: true, key, status: rec.status, count: rec.count, blocked: rec.blocked };
+  return { ok: true, key, status: rec.status, count: rec.count, blocked: rec.blocked,
+           mine: rec.mine, duplicate: rec.duplicate };
 }
 

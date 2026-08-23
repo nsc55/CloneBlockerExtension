@@ -188,6 +188,13 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
       state: { platform: 'threads', viewerId: '5550001111', debug: false },
       sw: (type, payload) => {
         globalThis.__swCalls.push({ type, at: Date.now() });
+        // The status lookup is answered out of local storage by the real
+        // worker, so it is fast even when the network is not. Putting it on
+        // the slow path would measure the harness rather than the sheet, and
+        // the sheet needs the answer BEFORE the button is pressed.
+        if (type === 'sw:report-status') {
+          return Promise.resolve(globalThis.__status || { ok: true });
+        }
         return new Promise(r => setTimeout(() => r({ ok: true }), globalThis.__swDelay));
       },
       onSw: () => {}
@@ -224,6 +231,16 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
   })()`);
   check('the sheet opens on the post', sheetUp === true, String(sheetUp));
 
+  // An account nothing is known about: no notice. Read here rather than after
+  // the send, because showSent() replaces the whole body of the sheet. This is
+  // the control for the already-reported case at the end.
+  const clean = await ev(`(() => {
+    const a = document.querySelector('[data-cloneblocker-ui]').shadowRoot
+      .querySelector('.already');
+    return a ? (a.hidden ? 'hidden' : a.textContent) : 'absent';
+  })()`);
+  check('an account with no history shows no notice', clean === 'hidden', String(clean));
+
   // Press Send, and time how long until the success state is on screen.
   const timing = JSON.parse(await ev(`
     (async () => {
@@ -244,6 +261,14 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
   check('the success state appears immediately, not after the round trip',
     timing.shown >= 0 && timing.shown < 400,
     timing.shown + 'ms, with a ' + timing.swDelay + 'ms backend');
+
+  // ...and the confirmation makes the claim it is entitled to make.
+  const cleanOk = await ev(`(() => {
+    const o = document.querySelector('[data-cloneblocker-ui]').shadowRoot
+      .querySelector('.ok');
+    return o ? o.textContent : null; })()`);
+  check('and says the report was sent, which for a first report is true',
+    cleanOk === 'report_sent', String(cleanOk));
   check('and the post starts disappearing at the same moment',
     timing.dismissing === '1', String(timing.dismissing));
 
@@ -267,6 +292,61 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
     calls.includes('sw:submit-report'), JSON.stringify(calls));
   check('and the block was still queued',
     calls.includes('sw:enqueue-platform-block'), JSON.stringify(calls));
+
+  // ---- an account already reported from this browser ----------------------
+  //
+  // The server keeps one report per pseudonym per target, so a second one is
+  // answered 200 with duplicate: true and NOTHING IS WRITTEN. The sheet used
+  // to say "Report sent" to that, which is the only case where the optimistic
+  // confirmation is not merely early but false. Both facts the sheet needs are
+  // local -- list membership and this browser's own report cache -- so it can
+  // be honest before the button is pressed rather than after the round trip.
+  await ev(`(() => {
+    globalThis.__status = { ok: true, mine: true, blocked: true };
+    globalThis.__swCalls = [];
+    return 1; })()`);
+  // post1's button again: post2 carries only a Share control, so the content
+  // script never recognises it as a post, and a dismissed post keeps its node
+  // and its button. Reopening is what a person does when they land on the same
+  // account twice, which is exactly the case under test.
+  await ev(`(() => {
+    document.querySelector('#post1 [data-cloneblocker-post]').click(); return 1; })()`);
+  await sleep(700);
+
+  const notice = JSON.parse(await ev(`(() => {
+    const root = document.querySelector('[data-cloneblocker-ui]').shadowRoot;
+    const a = root.querySelector('.already');
+    return JSON.stringify({ shown: a ? !a.hidden : null, text: a ? a.textContent : null,
+                            submit: !!root.querySelector('.submit'),
+                            disabled: !!(root.querySelector('.submit') || {}).disabled });
+  })()`));
+  check('the sheet says the account is already on the list, before anything is typed',
+    notice.shown === true && notice.text.includes('report_alreadyBlocked'),
+    JSON.stringify(notice));
+  check('and that this browser has already reported it',
+    notice.text.includes('report_alreadyReported'), notice.text);
+  // Not disabled: the two facts are informative, and somebody who opened this
+  // sheet on a blocked account may well still want the block half of it.
+  check('and still lets it be sent, because the block half is worth having',
+    notice.submit === true && notice.disabled === false, JSON.stringify(notice));
+
+  await ev(`(() => {
+    document.querySelector('[data-cloneblocker-ui]').shadowRoot
+      .querySelector('.submit').click(); return 1; })()`);
+  await sleep(400);
+  const repeat = JSON.parse(await ev(`(() => {
+    const root = document.querySelector('[data-cloneblocker-ui]').shadowRoot;
+    return JSON.stringify({ ok: (root.querySelector('.ok') || {}).textContent,
+                            notes: [...root.querySelectorAll('.note')].map(n => n.textContent) });
+  })()`));
+  check('the confirmation does not claim a report was sent when it was a repeat',
+    repeat.ok === 'report_alreadyReportedTitle', JSON.stringify(repeat));
+  check('and says the first report still stands',
+    repeat.notes.some(t => t.includes('report_alreadyReportedNote')),
+    JSON.stringify(repeat.notes));
+  check('and it was still submitted, because only the server may decide it is a duplicate',
+    JSON.parse(await ev(`JSON.stringify(globalThis.__swCalls.map(c => c.type))`))
+      .includes('sw:submit-report'));
 
   cdp.ws.close();
   console.log('\\n' + pass + '/' + (pass + fail) + ' checks passed');

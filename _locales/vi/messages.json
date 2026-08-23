@@ -643,6 +643,10 @@
     "message": "Chặn ngay",
     "description": "Popup button that queues a real platform block of the profile the tab is showing. Also named inside options_tagsNoneNote, so the two must match."
   },
+  "popup_blockIsLocal": {
+    "message": "Chặn chỉ ẩn tài khoản này với riêng bạn. Muốn tài khoản được xem xét và đưa vào danh sách chặn chung, hãy dùng Báo cáo là tài khoản giả mạo.",
+    "description": "Shown in the popup beneath the Block button. Block is local only; the wording must make clear which button reaches the moderators."
+  },
   "popup_blockQueued": {
     "message": "Đã vào hàng đợi",
     "description": "The Block now button once the block has been queued."
@@ -826,6 +830,22 @@
   "report_adminReviews": {
     "message": "Sẽ có người đọc và duyệt trước. Được duyệt xong, tài khoản này vào danh sách chặn chung, và mọi người đang dùng Clone Blocker cũng chặn họ.",
     "description": "Shown in the report sheet, under the reason picker. Says what approval leads to."
+  },
+  "report_alreadyBlocked": {
+    "message": "Tài khoản này đã có trong danh sách chặn chung.",
+    "description": "Shown at the top of the report sheet when this account is already on the shared blocklist. States a fact; it must not discourage reporting, because a first report from this person still counts."
+  },
+  "report_alreadyReported": {
+    "message": "Bạn đã báo cáo tài khoản này rồi. Gửi lại sẽ không tính thêm một phiếu — mỗi người chỉ báo cáo một lần cho mỗi tài khoản.",
+    "description": "Shown at the top of the report sheet when this browser has already filed a report against this account. The server keeps one report per person per account, so sending again is discarded."
+  },
+  "report_alreadyReportedNote": {
+    "message": "Báo cáo lần đầu của bạn vẫn còn. Không mất gì và cũng không thêm gì.",
+    "description": "Shown under that headline. Reassures that the first report is intact rather than implying something went wrong."
+  },
+  "report_alreadyReportedTitle": {
+    "message": "Đã báo cáo trước đó",
+    "description": "The confirmation headline in the report sheet when the report just sent was a repeat from this browser. It replaces \"Report sent\", which would not be true."
   },
   "report_alsoBlock": {
     "message": "Chặn luôn tài khoản này",

@@ -384,6 +384,15 @@
           <div class="psummary"></div>
           <a class="purl" target="_blank" rel="noreferrer noopener"></a>
         </div>
+        <!-- What is already true about this account, said BEFORE the reason
+             and the note rather than after the send. Both facts are knowable
+             without a round trip -- membership of the list is in local storage
+             and "did I report this" is in the local report cache -- and
+             withholding them meant somebody could write out a case against an
+             account they had already reported, press Send, be told "Report
+             sent", and have the server discard it on the dedup index without
+             a word. -->
+        <div class="already note" hidden></div>
         <label for="reason" data-i18n="report_reasonLabel"></label>
         <select id="reason"></select>
         <label for="note" data-i18n="report_noteLabel"></label>
@@ -436,6 +445,31 @@
       o.value = value; o.textContent = text;
       sel.appendChild(o);
     }
+
+    // Whether the report about to be written would be a REPEAT from this
+    // browser. Set from the status lookup below, read by showSent(), so the
+    // confirmation says what happened rather than what was asked for -- the
+    // one case where the optimistic "Sent" is not merely early but wrong.
+    let alreadyReported = false;
+
+    bridge.sw(P.SW.REPORT_STATUS, {
+      platform: PLATFORM, profileId: ident.profileId, username: ident.username
+    }).then((st) => {
+      // The dialog may already be gone, or be about a different account by
+      // now; either way this answer is not about what is on screen.
+      if (!st || !modal || !sheet.isConnected) return;
+      const lines = [];
+      // Two independent facts, and both can hold at once. Blocked says the
+      // account is on the shared list -- which does NOT mean this person has
+      // reported it, and their first report still counts. `mine` is the one
+      // that decides whether sending again achieves anything.
+      if (st.blocked) lines.push(T('report_alreadyBlocked'));
+      if (st.mine) { alreadyReported = true; lines.push(T('report_alreadyReported')); }
+      if (!lines.length) return;
+      const box = $('.already');
+      box.hidden = false;
+      box.textContent = lines.join(' ');
+    }).catch(() => { /* a status this dialog cannot get is not a reason to block it */ });
 
     // A report has to carry the account behind it, so say so up front rather
     // than letting someone write out a case and lose it to a 401 on submit.
@@ -625,7 +659,11 @@
       bd.textContent = '';
       const ok = document.createElement('div');
       ok.className = 'ok';
-      ok.textContent = T('report_sent');
+      // "Report sent" is a claim, and on a repeat it is a false one: the
+      // server keeps one report per pseudonym per target and answers a second
+      // with 200 and duplicate: true, having written nothing.
+      ok.textContent = alreadyReported
+        ? T('report_alreadyReportedTitle') : T('report_sent');
       // Asked for, accepted, not finished yet. Said plainly rather than
       // rounded up to "blocked".
       const queuedNote = wantsBlock ? document.createElement('div') : null;
@@ -645,7 +683,11 @@
       // round trip this no longer waits for. Claiming either now would mean
       // guessing. The activity page still shows the real status once it
       // arrives, which is the right place for a fact that takes time.
-      foot.textContent = T('report_adminReviews');
+      // The moderation promise belongs to a report that exists. A repeat gets
+      // the reassurance instead -- the first one is intact, which is the thing
+      // somebody seeing "Already reported" actually needs to know.
+      foot.textContent = alreadyReported
+        ? T('report_alreadyReportedNote') : T('report_adminReviews');
       bd.appendChild(ok);
       if (queuedNote) bd.appendChild(queuedNote);
       bd.appendChild(foot);

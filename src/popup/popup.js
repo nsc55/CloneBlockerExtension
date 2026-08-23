@@ -236,6 +236,8 @@
     // actually be honoured.
     const canBlock = settings.platformBlockEnabled && !!profile.profileId;
     show('blockProfile', canBlock);
+    // Only alongside the button it explains.
+    show('blockOnlyNote', canBlock);
     if (canBlock) {
       $('blockProfile').textContent = T('popup_blockButton');
       $('blockProfile').disabled = false;
