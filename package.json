@@ -21,6 +21,7 @@
     "check": "node tools/check.js",
     "pack": "node tools/pack.js",
     "crx": "node tools/make-crx.js",
+    "crx:zip": "node tools/wrap-crx.js",
     "icons": "node tools/make-icons.js",
     "store-assets": "node tools/make-store-assets.js"
   },
