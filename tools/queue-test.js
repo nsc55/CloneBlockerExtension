@@ -444,6 +444,62 @@ async function reset(settings) {
       empty.ok && empty.cleared === 0 && empty.waiting === 0, JSON.stringify(empty));
   }
 
+  // -- 2b3. a block the user pressed a button for jumps the pacing gate ------
+  //
+  // The report sheet's "block this profile too" and the popup's Block now both
+  // enqueue userInitiated. Waking the tab is not enough: the browser-wide gate
+  // is checked at claim time, so a block that lands mid-delay would still be
+  // told to come back later -- which reads as "the button did nothing". A
+  // deliberate act should run now, so a userInitiated enqueue opens the gate.
+  // Two things it must NOT override: a block genuinely in flight (a live
+  // lease), and a hard pause from a rate limit or checkpoint.
+  {
+    await reset({ experimentalOwnTab: false });
+    // A closed gate with nothing in flight: the pause after some earlier
+    // block. A user-pressed block should clear it and run.
+    store.local.stats = { gateUntil: Date.now() + 90000 };
+    await send('sw:enqueue-platform-block',
+      { platform: 'threads', ids: ['9300000001'], warm: true, userInitiated: true });
+    await flush();   // the gate is opened AFTER the reply, like the wake broadcast
+    check('a userInitiated block clears the pacing gate so it runs now',
+      !store.local.stats.gateUntil, JSON.stringify(store.local.stats));
+
+    // The same enqueue while a block is in flight (a live lease) must leave
+    // the gate shut: clearing it could put a second block on the wire
+    // alongside the first, which is the exact burst the gate prevents.
+    await reset({ experimentalOwnTab: false });
+    const gate = Date.now() + 90000;
+    store.local.stats = { gateUntil: gate };
+    store.local.leases = { 'threads:9999999999': Date.now() + 90000 };
+    await send('sw:enqueue-platform-block',
+      { platform: 'threads', ids: ['9300000002'], warm: true, userInitiated: true });
+    await flush();
+    check('but not while another block is in flight',
+      store.local.stats.gateUntil === gate, JSON.stringify(store.local.stats));
+
+    // And a hard pause (rate limit / checkpoint) always wins.
+    await reset({ experimentalOwnTab: false });
+    const paused = Date.now() + 20 * 60 * 1000;
+    store.local.stats = { gateUntil: Date.now() + 90000, pausedUntil: paused };
+    await send('sw:enqueue-platform-block',
+      { platform: 'threads', ids: ['9300000003'], warm: true, userInitiated: true });
+    await flush();
+    check('and never past a hard pause from a rate limit or a checkpoint',
+      store.local.stats.gateUntil > Date.now() && store.local.stats.pausedUntil === paused,
+      JSON.stringify(store.local.stats));
+
+    // A NON-userInitiated enqueue (the extension's own sweep) never touches
+    // the gate, whatever is or is not in flight.
+    await reset({ experimentalOwnTab: false });
+    const g2 = Date.now() + 90000;
+    store.local.stats = { gateUntil: g2 };
+    await send('sw:enqueue-platform-block',
+      { platform: 'threads', ids: ['9300000004'], warm: true });
+    await flush();
+    check('an unattended sweep enqueue leaves the gate exactly as it was',
+      store.local.stats.gateUntil === g2, JSON.stringify(store.local.stats));
+  }
+
   // -- 2c0. the setup guide, and who is allowed to see it twice -------------
   //
   // Chrome fires onInstalled with reason "install" on every reload of an

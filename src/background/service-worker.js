@@ -2033,6 +2033,32 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         // without a nudge an explicit block waits out a timer that was chosen
         // for the extension's own unattended sweeping.
         if (payload.userInitiated && queued && queued.added) {
+          // Cutting the tab's nap is not enough on its own: the browser-wide
+          // pacing gate is checked at claim time, and a userInitiated block
+          // that lands mid-delay would still be told to come back later. A
+          // block the person pressed a button for should run now, so open the
+          // gate for them -- with two guards that keep this from becoming a
+          // burst channel:
+          //
+          //   in flight  a live lease means a block is on the wire this very
+          //     moment. Clearing the gate then could put a second block out
+          //     alongside it, which is the exact burst the gate exists to
+          //     prevent. Leave it: the userInitiated target sorts to the front
+          //     of the queue and goes the instant the current one finishes.
+          //
+          //   hard pause  a rate limit or a checkpoint set pausedUntil. Firing
+          //     another block into that is the one response that makes things
+          //     worse, so the pause always wins -- the block stays queued and
+          //     the worker's own backoff governs it.
+          const st = await getLocal(KEYS.STATS, {});
+          const leases = await getLocal('leases', {});
+          const now = Date.now();
+          const inFlight = Object.values(leases).some(t => t > now);
+          const hardPaused = st.pausedUntil && now < st.pausedUntil;
+          if (!inFlight && !hardPaused && st.gateUntil) {
+            delete st.gateUntil;
+            await setLocal(KEYS.STATS, st);
+          }
           await broadcast(P.SW.WAKE_WORKER, { platform: payload.platform });
         }
         break;

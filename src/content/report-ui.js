@@ -76,6 +76,72 @@
     return out;
   }
 
+  function norm(s) {
+    return identity.norm ? identity.norm(s) : String(s || '').trim().toLowerCase();
+  }
+
+  /**
+   * The numeric id to block, resolved right now rather than left to a sweep.
+   *
+   * A block is issued against a numeric id, never a handle, and on Threads the
+   * page never puts that id in the DOM -- it lives in the React fibers that
+   * only the MAIN world can read. The alias map holds it once the periodic
+   * sweep has seen the author, but from a fresh feed it usually has not yet,
+   * and until it does the report sheet's "block this profile too" had nothing
+   * to enqueue: it silently did nothing while the report went out, which is
+   * exactly the "it does not block" that was reported.
+   *
+   * So when the alias map is empty for this account, ask the MAIN world for
+   * the id there and then, off the very post the person is acting on. The
+   * answer is matched against the handle we already have, so a post that links
+   * to more than one account cannot resolve to the wrong one; with no handle
+   * to match against, a lone unambiguous id is accepted.
+   */
+  async function resolveTargetId(ident, ctx) {
+    if (ident.profileId) return String(ident.profileId);
+    if (ident.username) {
+      const known = identity.idForUsername(ident.username);
+      if (known) return String(known);
+    }
+    if (!bridge.request) return null;
+
+    // The node most likely to carry this author in its fibers: the post that
+    // was acted on, or -- on the account's own profile page -- any post of
+    // theirs, falling back to the whole document.
+    const node = (ctx && ctx.postEl) ||
+      document.querySelector('[data-pressable-container]') ||
+      document.body;
+    if (!node) return null;
+
+    const probe = 'rep' + Math.random().toString(36).slice(2, 9);
+    let answers = null;
+    try {
+      node.setAttribute('data-cb-probe', probe);
+      const res = await bridge.request(P.RESOLVE_IDS, { nodes: [{ probe }] }, 8000);
+      answers = res && res.answers;
+    } catch (e) {
+      log('id resolve failed', e && e.message);
+    } finally {
+      try { if (node.getAttribute('data-cb-probe') === probe) node.removeAttribute('data-cb-probe'); }
+      catch (e) { /* detached */ }
+    }
+
+    const ans = (answers || []).find(a => a.probe === probe);
+    const ids = (ans && ans.identities) || [];
+    let hit = null;
+    if (ident.username) {
+      hit = ids.find(x => x.id && x.username && norm(x.username) === norm(ident.username));
+    } else {
+      const withId = ids.filter(x => x.id);
+      if (withId.length === 1) hit = withId[0];
+    }
+    if (hit && hit.id) {
+      if (hit.username && identity.learn) identity.learn(hit.id, hit.username);
+      return String(hit.id);
+    }
+    return null;
+  }
+
   /** Is this identity the signed-in user? Reporting yourself is never wanted,
    *  and the site links to your own profile in its navigation constantly. */
   function isViewer(ident) {
@@ -608,38 +674,47 @@
       // because until it lands the account keeps appearing in front of them.
       void bridge.sw(P.SW.SUBMIT_REPORT, payload).catch(() => null);
       if (wantsBlock) {
-        // The same resolution the report was just built from, deliberately
-        // reused rather than taken again. Two enrich() calls a few statements
-        // apart could disagree if a sweep landed between them, and a block
-        // aimed at one target while the report names another is the one
-        // outcome neither of them should be able to produce.
-        const now = fresh;
-        // No id: the report still carries the username, and once that is on
-        // the list the ordinary sweep blocks the profile the next time it is
-        // seen. Nothing is lost, so nothing is claimed -- but the sheet has
-        // already said "being blocked", so say the truer thing instead.
-        if (now.profileId) {
-          const queued = bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
+        void (async () => {
+          // The id to block, resolved here rather than left to a sweep.
+          //
+          // `fresh` already tried the alias map; on a feed post whose author
+          // the sweep has not reached yet that comes back without a numeric
+          // id, and a block is issued against an id, never a handle. So ask
+          // the MAIN world for it off the very post being acted on -- the same
+          // fibers the feed's own hide sweep reads. This is what makes the tick
+          // box actually block instead of quietly enqueuing nothing.
+          const id = await resolveTargetId(fresh, ctx);
+          if (!id) {
+            // Still no numeric id -- the page has not surfaced this author to
+            // any world yet. The report carries the handle, so once that is on
+            // the shared list the ordinary sweep blocks the profile the next
+            // time it is seen. Nothing is lost; nothing instant is possible.
+            return;
+          }
+
+          // userInitiated: a button the person pressed about THIS account. On
+          // the service-worker side that jumps the queue AND opens the pacing
+          // gate, so the block runs now rather than waiting out a timer chosen
+          // for the extension's own unattended sweeping -- "no queue, no wait".
+          const queued = await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
             platform: PLATFORM,
-            ids: [String(now.profileId)],
-            names: now.username ? { [String(now.profileId)]: now.username } : undefined,
+            ids: [String(id)],
+            names: fresh.username ? { [String(id)]: fresh.username } : undefined,
             warm: true,
             userInitiated: true
           }).catch(() => null);
 
           if (reloadAfter) {
-            void (async () => {
-              await queued;
-              // Twenty seconds, then give up quietly. A block that has not
-              // landed by then is usually waiting on the gate, and reloading
-              // would show the account exactly as it is now -- which looks
-              // like the block failed rather than like it is still coming.
-              // The sheet already says what was asked for, and a failure has
-              // the toolbar badge.
-              if (await blockLanded(now.profileId, 20000)) location.reload();
-            })();
+            void queued;
+            // Twenty seconds, then give up quietly. A block that has not
+            // landed by then is usually waiting on a hard pause (a rate limit
+            // or a checkpoint), and reloading would show the account exactly
+            // as it is now -- which looks like the block failed rather than
+            // like it is still coming. The sheet already says what was asked
+            // for, and a failure has the toolbar badge.
+            if (await blockLanded(id, 20000)) location.reload();
           }
-        }
+        })();
       }
     });
 

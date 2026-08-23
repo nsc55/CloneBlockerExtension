@@ -78,6 +78,17 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
   <div class="row" style="display:flex;gap:12px">
     <div role="button"><svg width="16" height="16" aria-label="Share"></svg></div>
   </div>
+</div>
+<div data-pressable-container="true" class="post" id="post3">
+  <a href="/@freshclone">freshclone</a>
+  <a href="/@freshclone/post/GHI789">permalink</a>
+  <div>An author the sweep has not reached, so the alias map has no id for it.</div>
+  <div class="row" style="display:flex;gap:12px">
+    <div role="button"><svg width="16" height="16" aria-label="Like"></svg></div>
+    <div role="button"><svg width="16" height="16" aria-label="Reply"></svg></div>
+    <div role="button"><svg width="16" height="16" aria-label="Repost"></svg></div>
+    <div role="button"><svg width="16" height="16" aria-label="Share"></svg></div>
+  </div>
 </div>`;
 
 (async () => {
@@ -187,7 +198,7 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
     globalThis.CB_BRIDGE = {
       state: { platform: 'threads', viewerId: '5550001111', debug: false },
       sw: (type, payload) => {
-        globalThis.__swCalls.push({ type, at: Date.now() });
+        globalThis.__swCalls.push({ type, at: Date.now(), payload });
         // The status lookup is answered out of local storage by the real
         // worker, so it is fast even when the network is not. Putting it on
         // the slow path would measure the harness rather than the sheet, and
@@ -197,13 +208,29 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
         }
         return new Promise(r => setTimeout(() => r({ ok: true }), globalThis.__swDelay));
       },
-      onSw: () => {}
+      onSw: () => {},
+      // The MAIN-world round trip the report sheet uses to learn a numeric id
+      // when the alias map has none. Answers whatever the caller set on
+      // __resolveAnswer, echoing back the probe id the sheet tagged the node
+      // with -- a real answer that does not echo the probe would be ignored,
+      // which is exactly the failure worth reproducing.
+      request: (type, payload) => {
+        globalThis.__reqCalls = globalThis.__reqCalls || [];
+        globalThis.__reqCalls.push({ type, payload });
+        if (type === 'iso:resolve-ids') {
+          const probe = payload && payload.nodes && payload.nodes[0] && payload.nodes[0].probe;
+          const ids = globalThis.__resolveAnswer || [];
+          return Promise.resolve({ answers: [{ probe, identities: ids }] });
+        }
+        return Promise.resolve({ ok: true });
+      }
     };
     // The identity map the content world normally builds from Meta's own Relay
     // store. Nothing here needs it to know anything; it needs it to exist.
     globalThis.CB_IDENTITY = {
       idForUsername: (u) => (u === 'someclone' ? '9001234567' : null),
       usernameForId: () => null,
+      learn: () => {},
       noteIdentity: () => {}
     };
     return 1;
@@ -347,6 +374,57 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>t</title>
   check('and it was still submitted, because only the server may decide it is a duplicate',
     JSON.parse(await ev(`JSON.stringify(globalThis.__swCalls.map(c => c.type))`))
       .includes('sw:submit-report'));
+
+  // ---- an author the alias map has no id for ------------------------------
+  //
+  // The bug: a block is issued against a numeric id, and on a fresh feed the
+  // sweep has not yet learned the id for the author of a given post -- so the
+  // alias map returns nothing, and the report sheet used to enqueue nothing at
+  // all. The tick box silently did nothing while the report went out, which is
+  // "it does not block". The fix resolves the id on the spot through the MAIN
+  // world, off the very post being acted on, and blocks against that.
+
+  // First, with the resolver returning NOTHING: no id anywhere, so nothing can
+  // be blocked instantly and no bogus id may be enqueued.
+  await ev(`(() => {
+    globalThis.__status = null; globalThis.__swCalls = []; globalThis.__reqCalls = [];
+    globalThis.__resolveAnswer = [];
+    return 1; })()`);
+  await ev(`(() => {
+    document.querySelector('#post3 [data-cloneblocker-post]').click(); return 1; })()`);
+  await sleep(700);
+  await ev(`document.querySelector('[data-cloneblocker-ui]').shadowRoot.querySelector('.submit').click()`);
+  await sleep(600);
+  const noId = JSON.parse(await ev(`JSON.stringify({
+    asked: (globalThis.__reqCalls || []).some(c => c.type === 'iso:resolve-ids'),
+    enq: (globalThis.__swCalls || []).filter(c => c.type === 'sw:enqueue-platform-block').map(c => c.payload && c.payload.ids)
+  })`));
+  check('with no id known, the sheet asks the MAIN world for one', noId.asked === true,
+    JSON.stringify(noId));
+  check('and, still finding none, enqueues no block rather than a bogus one',
+    noId.enq.length === 0, JSON.stringify(noId.enq));
+
+  // Now with the resolver returning the real author id: the block must be
+  // enqueued against THAT numeric id, not the handle.
+  await ev(`(() => {
+    globalThis.__swCalls = []; globalThis.__reqCalls = [];
+    globalThis.__resolveAnswer = [{ id: '7778889990', username: 'freshclone' }];
+    return 1; })()`);
+  await ev(`(() => {
+    document.querySelector('#post3 [data-cloneblocker-post]').click(); return 1; })()`);
+  await sleep(700);
+  await ev(`document.querySelector('[data-cloneblocker-ui]').shadowRoot.querySelector('.submit').click()`);
+  await sleep(600);
+  const gotId = JSON.parse(await ev(`JSON.stringify({
+    enq: (globalThis.__swCalls || []).find(c => c.type === 'sw:enqueue-platform-block'),
+  })`));
+  const enqIds = gotId.enq && gotId.enq.payload && gotId.enq.payload.ids;
+  const userInit = gotId.enq && gotId.enq.payload && gotId.enq.payload.userInitiated;
+  check('once the id is resolved, the block is enqueued against the numeric id',
+    Array.isArray(enqIds) && enqIds.length === 1 && enqIds[0] === '7778889990',
+    JSON.stringify(enqIds));
+  check('and marked userInitiated, so the worker jumps the queue and the gate',
+    userInit === true, String(userInit));
 
   cdp.ws.close();
   console.log('\\n' + pass + '/' + (pass + fail) + ' checks passed');
