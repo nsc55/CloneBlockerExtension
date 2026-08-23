@@ -11,14 +11,14 @@ Tiện ích này sẽ tải danh sách clone từ nguồn dữ liệu được �
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/clone-blocker/mlkbihlabbmjdhmadjkijioafknfnmaj">
-    <img src="hosting/img/chrome-web-store-badge-496x150.png" width="150"
+    <img src="docs/img/chrome-web-store-badge-496x150.png" width="150"
          alt="Available in the Chrome Web Store">
   </a>
 </p>
 
 <p align="center">
   <a href="https://cloneblocker.tree55.com/">Trang chủ</a> ·
-  <a href="https://cloneblocker.tree55.com/list">Danh sách công khai</a> ·
+  <a href="https://cloneblocker.tree55.com/list">Danh sách chặn công khai</a> ·
   <a href="https://cloneblocker.tree55.com/privacy">Quyền riêng tư</a> ·
   <a href="https://cloneblocker.tree55.com/faq">Câu hỏi thường gặp</a>
 </p>

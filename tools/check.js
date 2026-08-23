@@ -488,6 +488,13 @@ for (const page of ['popup', 'activity', 'welcome']) {
 // carried root-relative paths with them into docs/, where `docs/RESEARCH.md`
 // means `docs/docs/RESEARCH.md` and does not exist.
 //
+// HTML ATTRIBUTES COUNT TOO, and leaving them out is how a broken image sat in
+// the README's own header block through every run of this check. Markdown
+// cannot centre anything or size an image, so a README reaches for raw HTML
+// exactly where it is most visible -- the badge under the title -- and a
+// `src="..."` there is a link like any other. It was missed because the
+// pattern below only ever matched `[text](href)`.
+//
 // Anchors are deliberately not checked. A heading is renamed far more often
 // than a file is moved, and a check that failed the build over a `#section`
 // would be turned off within a week.
@@ -507,16 +514,21 @@ for (const page of ['popup', 'activity', 'welcome']) {
   let seen = 0;
   for (const rel of md) {
     const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
-    for (const m of text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
-      const href = m[1];
-      if (/^(https?:|mailto:|#)/.test(href)) continue;
+    const refs = [
+      ...[...text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)].map(m => m[1]),
+      // The raw-HTML half: <img src>, <a href>, and anything else that names a
+      // file. Quoted attributes only, which is every one in these documents.
+      ...[...text.matchAll(/\s(?:src|href)="([^"]+)"/g)].map(m => m[1])
+    ];
+    for (const href of refs) {
+      if (/^(https?:|mailto:|data:|#)/.test(href)) continue;
       seen++;
       const target = path.resolve(path.dirname(path.join(ROOT, rel)), href.split('#')[0]);
       if (!fs.existsSync(target)) broken.push(rel + ' -> ' + href);
     }
   }
   report(broken.length === 0,
-    `every relative link in the docs resolves (${seen} checked)`,
+    `every relative link and image in the docs resolves (${seen} checked)`,
     broken.join('; '));
 }
 

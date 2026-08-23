@@ -15,7 +15,7 @@ too.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/clone-blocker/mlkbihlabbmjdhmadjkijioafknfnmaj">
-    <img src="hosting/img/chrome-web-store-badge-496x150.png" width="150"
+    <img src="docs/img/chrome-web-store-badge-496x150.png" width="150"
          alt="Available in the Chrome Web Store">
   </a>
 </p>
