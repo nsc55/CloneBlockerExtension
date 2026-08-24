@@ -1228,7 +1228,7 @@
     "description": "Accessible name of the pager under a long list, read aloud by a screen reader."
   },
   "sw_reportBusy": {
-    "message": "May chu dang ban. Bao cao cua ban da duoc luu va se duoc gui lai sau.",
+    "message": "Máy chủ đang bận. Báo cáo của bạn đã được lưu và sẽ được gửi lại sau.",
     "description": "Shown when the backend rate limits or closes intake; the report is queued."
   },
   "sw_reportQueued": {

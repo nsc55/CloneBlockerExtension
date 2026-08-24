@@ -1792,6 +1792,59 @@ async function reset(settings) {
     delete global.fetch;
   }
 
+  // -- 13d-2. a refusal that will never become an acceptance -----------------
+  //
+  // The counterpart to 13d, and the line between them is the status code. A 400
+  // may be transient from the client's side and must be kept. A 403 is not
+  // "not yet", it is "not you": retrying earned the same answer six times over
+  // about thirty-six hours, and then put the server's own English token on the
+  // badge of somebody reading Vietnamese.
+  {
+    await reset({ platformBlockEnabled: false });
+    await setSettings({ apiBase: 'https://demo.example/v1' });
+
+    let calls = 0;
+    global.fetch = async () => {
+      calls++;
+      return {
+        ok: false, status: 403, headers: { get: () => null },
+        text: async () => '{"error":"reporter_blocked"}',
+        json: async () => ({ error: 'reporter_blocked' })
+      };
+    };
+
+    const out = await send('sw:submit-report', {
+      platform: 'threads', profileId: '4440001111', username: 'forbidden.one',
+      reason: 'clone', viewerId: '2904880000'
+    });
+    check('a 403 is not queued for retry',
+      (store.local.reportOutbox || []).length === 0,
+      JSON.stringify((store.local.reportOutbox || []).map(e => e.why)));
+    check('and the caller is told it failed rather than that it is queued',
+      out.ok === false && out.status === 403 && !out.queued,
+      JSON.stringify(out));
+
+    const alerts = (await send('sw:alerts-get')).alerts || [];
+    check('it is surfaced once, not silently dropped',
+      alerts.length === 1 && alerts[0].key === 'threads:4440001111',
+      JSON.stringify(alerts.map(a => a.key)));
+    // The whole point: what reaches the badge is a sentence, not a protocol
+    // token the server happened to choose.
+    check('and what reaches the badge is a translated sentence, not a raw token',
+      alerts[0] && alerts[0].detail !== 'reporter_blocked' &&
+      /\S/.test(alerts[0].detail || ''),
+      JSON.stringify(alerts[0] && alerts[0].detail));
+
+    // Draining the outbox must not resurrect it either -- there is nothing to
+    // drain, so nothing may be sent.
+    const before = calls;
+    await send('sw:flush-outbox').catch(() => null);
+    check('flushing the outbox sends nothing, because nothing was kept',
+      calls === before, String(calls - before));
+
+    delete global.fetch;
+  }
+
   // -- 13e. a report with nothing to file against ----------------------------
   {
     await reset({ platformBlockEnabled: false });

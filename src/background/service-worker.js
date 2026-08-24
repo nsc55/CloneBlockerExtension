@@ -2644,6 +2644,23 @@ async function submitReport(payload, opts) {
     // failed; what must not be decided here is that the report stops existing
     // because one response was not the one expected.
     const err = (json && json.error) || T('sw_serverHttp', res.status);
+
+    // 403 is terminal, and keeping it was a mistake in the other direction.
+    //
+    // The comment below is right that a 400 must not end a report's existence.
+    // 403 is the one status where the opposite holds: it does not mean "not
+    // yet", it means "not you", and no amount of waiting changes it. Sweeping
+    // it in with the retryable failures bought six requests across about
+    // thirty-six hours to earn the same answer, and then put whatever token the
+    // server sent -- an English one -- on the badge of a Vietnamese user.
+    //
+    // Said once, in a language the person reads, and not sent again.
+    if (res.status === 403) {
+      await noteAlert(reportKeyFor(payload.platform, payload.profileId, payload.username),
+                      T('sw_reportRefused'), 'report');
+      return { ok: false, status: 403, error: T('sw_reportRefused') };
+    }
+
     if (!(opts && opts.noQueue)) {
       await outboxAdd(payload, 'refused:' + res.status);
       return { ok: true, queued: true,
