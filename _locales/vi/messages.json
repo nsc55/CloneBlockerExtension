@@ -879,6 +879,10 @@
     "message": "Việc chặn đã được xếp hàng — sẽ diễn ra ngay sau đây, khi có một thẻ Facebook hoặc Threads thực hiện được.",
     "description": "Shown under the confirmation in the report sheet when the block was accepted but has not finished yet. It must not claim the account is already blocked."
   },
+  "report_commentBlock": {
+    "message": "Chặn",
+    "description": "The block button the extension adds to each Facebook comment, sitting after Like and Reply. A verb; keep it to one short word."
+  },
   "report_chip": {
     "message": "Báo cáo",
     "description": "The small button that appears when you hover a name on Facebook or Threads. Keep it short; it has to fit beside a name."

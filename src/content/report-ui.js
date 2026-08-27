@@ -1100,6 +1100,180 @@
     if (added) log('injected', added, 'thread report buttons');
   }
 
+  // ==========================================================================
+  // Facebook: a block button in each COMMENT's action row.
+  //
+  // Parity with the Threads post button above -- same sheet, same
+  // report-and-block-by-default behaviour -- but Facebook has no
+  // data-pressable-container and its comments are role="article" nodes. The
+  // one signal that survives every language (this deployment's users are
+  // Vietnamese, so Like/Reply read Thich/Tra loi) is that a comment's author
+  // link carries comment_id= in its href. That is how a comment is told from
+  // the post that contains it, and how its author is identified.
+  // ==========================================================================
+  const FB_COMMENT_MARK = 'data-cloneblocker-comment-btn';
+
+  /** Every rendered comment and reply, never the post that nests them.
+   *  A leaf article (no article inside it) whose links carry comment_id is a
+   *  comment; the post article is excluded because it contains these. */
+  function facebookCommentArticles() {
+    const out = [];
+    for (const art of document.querySelectorAll('[role="article"]')) {
+      if (art.querySelector('[role="article"]')) continue;      // the post, or a wrapper
+      if (!art.querySelector('a[href*="comment_id="]')) continue;
+      out.push(art);
+    }
+    return out;
+  }
+
+  /** The comment's author: among its comment_id links, the one that resolves to
+   *  a profile (the timestamp/permalink link points at /reel|/photo, which
+   *  identityFromAnchor rejects as reserved). */
+  function facebookCommentAuthor(article) {
+    for (const a of article.querySelectorAll('a[href*="comment_id="]')) {
+      const id = identityFromAnchor(a);
+      if (id && (id.username || id.profileId)) return { ident: id, anchor: a };
+    }
+    return null;
+  }
+
+  /** The reportable facts of a comment: a clean permalink and the comment text. */
+  function facebookCommentContext(article, authorAnchor) {
+    let postUrl = null, postId = null;
+    let href = null;
+    for (const a of article.querySelectorAll('a[href*="comment_id="]')) {
+      const h = a.getAttribute('href') || '';
+      if (h) { href = h; break; }
+    }
+    if (href) {
+      try {
+        const u = new URL(href, location.origin);
+        postId = u.searchParams.get('comment_id') || null;
+        // Drop Facebook's per-view tracking blobs (__cft__, __tn__); keep the
+        // profile path and the comment id, which is all a reviewer needs.
+        const keep = new URLSearchParams();
+        if (postId) keep.set('comment_id', postId);
+        postUrl = u.origin + u.pathname + (keep.toString() ? '?' + keep.toString() : '');
+      } catch (e) { /* a permalink we cannot parse is not worth an exception */ }
+    }
+    // Summary: the comment's own text -- the longest auto-direction block that
+    // is not the author's name.
+    const name = (authorAnchor && (authorAnchor.textContent || '').trim()) || '';
+    let best = '';
+    for (const el of article.querySelectorAll('div[dir="auto"], span[dir="auto"]')) {
+      const t = (el.innerText || '').trim();
+      if (t.length <= best.length) continue;
+      if (name && t === name) continue;
+      best = t;
+    }
+    return { postUrl, postId, summary: best ? best.slice(0, 280) : '' };
+  }
+
+  /**
+   * The insertion slot for the block button: the comment's LAST short-text
+   * action button in document order, so ours sits after it -- exactly where
+   * the Threads button sits after Share.
+   *
+   * Found by SHAPE, not by English (this deployment's users read "Thích" and
+   * "Trả lời", not "Like"/"Reply"). Facebook renders Like and Reply in
+   * SEPARATE branches at different depths, so grouping them by a shared parent
+   * fails; what holds in every layout is that the action bar is the bottom of
+   * the comment, so the last action button in document order is Reply. A
+   * "See more" inside the comment text sits ABOVE the bar and so never wins.
+   */
+  function findCommentActionRow(article) {
+    let last = null;
+    for (const b of article.querySelectorAll('[role="button"]')) {
+      const t = (b.textContent || '').trim();
+      if (t.length < 1 || t.length > 24) continue;
+      // Keep the one latest in document order.
+      if (!last || (last.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)) last = b;
+    }
+    return last;
+  }
+
+  function buildCommentBlockButton(article, authorAnchor) {
+    const btn = document.createElement('div');
+    btn.setAttribute(FB_COMMENT_MARK, '1');
+    btn.setAttribute('role', 'button');
+    btn.setAttribute('tabindex', '0');
+    btn.setAttribute('aria-label', T('report_buttonLabel'));
+    btn.title = T('report_buttonLabel');
+    // Sized to sit in the comment bar next to the small Like/Reply text
+    // controls rather than tower over them.
+    btn.style.cssText = [
+      'display:inline-flex', 'align-items:center', 'gap:4px',
+      'margin-left:12px', 'padding:0 2px', 'border-radius:4px',
+      'cursor:pointer', 'color:inherit', 'opacity:.75', 'font-weight:600',
+      'font-size:13px', 'line-height:16px', 'vertical-align:middle',
+      'transition:opacity .12s ease,color .12s ease', 'user-select:none'
+    ].join(';');
+    const svg = reportIconSvg();
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    btn.appendChild(svg);
+    const label = document.createElement('span');
+    label.textContent = T('report_commentBlock');
+    btn.appendChild(label);
+
+    btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.color = '#e0364f'; });
+    btn.addEventListener('mouseleave', () => { btn.style.opacity = '.75'; btn.style.color = 'inherit'; });
+
+    const activate = (e) => {
+      // Comments are clickable; keep our click off Facebook's own handlers.
+      e.preventDefault();
+      e.stopPropagation();
+      const found = facebookCommentAuthor(article) ||
+        { ident: identityFromAnchor(authorAnchor), anchor: authorAnchor };
+      const ident = enrich(found.ident || {});
+      if (!ident.username && !ident.profileId) return;
+      if (isViewer(ident)) return;                 // never offer to block yourself
+      const ctx = facebookCommentContext(article, found.anchor || authorAnchor);
+      // postEl first so a same-named key in ctx cannot swap the node for a
+      // string; the sheet uses it to take the comment off screen on Block and
+      // to probe the MAIN world for the author's numeric id.
+      openModal(ident, found.anchor || authorAnchor,
+        Object.assign({ postEl: article }, ctx,
+          { displayName: (found.anchor && displayNameFor(found.anchor)) || '' }));
+    };
+    btn.addEventListener('click', activate, true);
+    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') activate(e); });
+    return btn;
+  }
+
+  function injectFacebookCommentButtons() {
+    if (PLATFORM !== 'facebook' || !settings.reportUiEnabled) return;
+    let added = 0;
+    for (const art of facebookCommentArticles()) {
+      const author = facebookCommentAuthor(art);
+      if (!author) continue;
+      const ident = enrich(author.ident);
+      if (isViewer(ident)) continue;
+      const slot = findCommentActionRow(art);
+      if (!slot || !slot.parentElement) continue;
+      // React recycles comment nodes, so key the button to the comment it was
+      // built for and replace it when the node is reused for another.
+      const key = facebookCommentContext(art, author.anchor).postId || '';
+      const existing = art.querySelector('[' + FB_COMMENT_MARK + ']');
+      if (existing) {
+        if (existing.getAttribute('data-cloneblocker-comment') === key) continue;
+        existing.remove();
+      }
+      const btn = buildCommentBlockButton(art, author.anchor);
+      btn.setAttribute('data-cloneblocker-comment', key);
+      // After the last action (Reply), like the Threads button sits after Share.
+      slot.insertAdjacentElement('afterend', btn);
+      added++;
+    }
+    if (added) log('injected', added, 'facebook comment block buttons');
+  }
+
+  /** Both injectors, each self-gated by platform. */
+  function injectButtons() {
+    injectThreadButtons();
+    injectFacebookCommentButtons();
+  }
+
   function queueInject() {
     if (injectQueued) return;
     injectQueued = true;
@@ -1108,7 +1282,7 @@
       if (ran) return;
       ran = true;
       injectQueued = false;
-      injectThreadButtons();
+      injectButtons();
     };
     // Idle when the browser offers it, AND a timer regardless -- whichever
     // arrives first wins, which is what `ran` is for.
@@ -1128,7 +1302,7 @@
   }
 
   function startThreadButtons() {
-    if (PLATFORM !== 'threads') return;
+    if (PLATFORM !== 'threads' && PLATFORM !== 'facebook') return;
     const obs = new MutationObserver((records) => {
       for (const r of records) {
         if (r.type === 'childList' && r.addedNodes.length) { queueInject(); return; }
@@ -1146,7 +1320,8 @@
   }
 
   function removeThreadButtons() {
-    for (const b of document.querySelectorAll('[' + MARK_ATTR + ']')) b.remove();
+    for (const b of document.querySelectorAll(
+      '[' + MARK_ATTR + '],[' + FB_COMMENT_MARK + ']')) b.remove();
   }
 
   function updateSettings(next) {
