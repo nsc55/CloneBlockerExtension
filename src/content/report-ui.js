@@ -97,8 +97,38 @@
    * to more than one account cannot resolve to the wrong one; with no handle
    * to match against, a lone unambiguous id is accepted.
    */
+  /**
+   * A Facebook comment author's numeric id, from the Relay store via the MAIN
+   * world, keyed by the comment id read off the permalink.
+   *
+   * This is the one source that works: a comment's markup carries a vanity URL,
+   * not an id, and the store's User record for the author has no username to
+   * match on -- but the Comment record, keyed by exactly this comment id, holds
+   * the author's id. Learned into the alias map on the way through, so a second
+   * action on the same person needs no round trip.
+   */
+  async function resolveCommentAuthorId(commentId) {
+    if (!commentId || !bridge.request) return null;
+    try {
+      const res = await bridge.request(P.RESOLVE_IDS, { commentIds: [commentId] }, 8000);
+      const ans = (res && res.answers || []).find(a => a.commentId === commentId);
+      const hit = ans && ans.identities && ans.identities[0];
+      if (hit && hit.id) {
+        if (hit.username && identity.learn) identity.learn(hit.id, hit.username);
+        return String(hit.id);
+      }
+    } catch (e) { log('comment author resolve failed', e && e.message); }
+    return null;
+  }
+
   async function resolveTargetId(ident, ctx) {
     if (ident.profileId) return String(ident.profileId);
+    // A Facebook comment: resolve the author off the comment id before anything
+    // else, because neither the alias map nor the node fibers hold it.
+    if (PLATFORM === 'facebook' && ctx && ctx.postId) {
+      const viaComment = await resolveCommentAuthorId(ctx.postId);
+      if (viaComment) return viaComment;
+    }
     if (ident.username) {
       const known = identity.idForUsername(ident.username);
       if (known) return String(known);
@@ -488,11 +518,34 @@
     const $ = (s) => sheet.querySelector(s);
     $('.who .n').textContent = name ||
       (ident.username ? '@' + ident.username : T('report_unknownProfile'));
-    $('.who .m').textContent = [
-      ident.username ? '@' + ident.username : null,
-      ident.profileId ? T('common_idValue', ident.profileId) : T('report_noNumericId'),
-      PLATFORM
-    ].filter(Boolean).join('  ·  ');
+    const fillIdLine = (id) => {
+      $('.who .m').textContent = [
+        ident.username ? '@' + ident.username : null,
+        id ? T('common_idValue', id) : T('report_noNumericId'),
+        PLATFORM
+      ].filter(Boolean).join('  ·  ');
+    };
+    fillIdLine(ident.profileId);
+
+    // A Facebook comment shows a vanity link, never the numeric id, so the line
+    // above says "no id yet". The Relay store has it, keyed by the comment id;
+    // resolve it in the background, fill it in, and set it on `ident` so the
+    // report and block that follow carry the id rather than only the handle.
+    if (PLATFORM === 'facebook' && ctx.postId && !ident.profileId) {
+      resolveCommentAuthorId(ctx.postId).then((id) => {
+        if (!id || !modal || !sheet.isConnected) return;
+        ident.profileId = id;
+        fillIdLine(id);
+        // "It will block when this profile is next seen" no longer applies once
+        // the id is in hand: it can block now (or queue, if blocking is paused).
+        const bn = $('.blocknote');
+        if (bn) {
+          if (settings.platformBlockEnabled === false) {
+            bn.hidden = false; bn.textContent = T('report_alsoBlockQueued');
+          } else { bn.hidden = true; bn.textContent = ''; }
+        }
+      }).catch(() => {});
+    }
 
     if (ctx.summary || ctx.postUrl) {
       $('.post').hidden = false;

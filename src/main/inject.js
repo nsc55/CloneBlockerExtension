@@ -420,6 +420,64 @@
     return out;
   }
 
+  /**
+   * A Facebook comment's author, resolved from the Relay store by comment id.
+   *
+   * Facebook comments never carry the author's numeric id in their markup: the
+   * link is a vanity URL (facebook.com/some.name) or a bare profile.php, the
+   * fibers render from store refs rather than inline props, and the store's
+   * User record for a comment author has a name but no username to key on. So
+   * identifyNode/identityFromHrefs both come back empty, and a block against a
+   * comment author had nothing to aim at.
+   *
+   * The store does hold it, exactly. The `comment_id` in the comment's own href
+   * (base64 of "comment:<feedback>_<pk>") is the store's KEY for the Comment
+   * record, whose author.__ref is the author's numeric id. Confirmed live: every
+   * comment resolved by a direct key hit, name and id agreeing. A scan by the
+   * decoded comment pk is kept as a fallback for any key-format drift.
+   */
+  function resolveCommentAuthor(commentId) {
+    const cid = String(commentId || '');
+    if (!cid) return null;
+    const envInfo = getRelayEnvironment();
+    if (!envInfo || !envInfo.env) return null;
+    let src;
+    try { src = envInfo.env.getStore().getSource(); } catch (e) { return null; }
+
+    let rec = null;
+    try { rec = src.get(cid); } catch (e) { /* not a key here */ }
+    if (!rec || rec.__typename !== 'Comment') {
+      let decoded = '';
+      try { decoded = atob(cid); } catch (e) { /* not base64 */ }
+      const pk = (decoded.match(/_(\d+)$/) || [])[1];
+      let idsList;
+      try { idsList = src.getRecordIDs(); } catch (e) { idsList = []; }
+      for (const key of idsList) {
+        let r;
+        try { r = src.get(key); } catch (e) { continue; }
+        if (!r || r.__typename !== 'Comment') continue;
+        if (key === cid) { rec = r; break; }
+        if (pk) {
+          let kd = '';
+          try { kd = atob(key); } catch (e) { /* ignore */ }
+          if (kd.endsWith('_' + pk)) { rec = r; break; }
+        }
+      }
+    }
+    if (!rec || rec.__typename !== 'Comment') return null;
+
+    const ref = rec.author && (rec.author.__ref || rec.author.id);
+    if (ref == null) return null;
+    let author = null;
+    if (typeof ref === 'string') { try { author = src.get(ref); } catch (e) { /* ignore */ } }
+    // author.__ref is itself the numeric id in current Comet; fall back to the
+    // digits inside whatever the ref is.
+    let id = (author && author.id) || (String(ref).match(/(\d{5,})/) || [])[1] || null;
+    if (id == null || !/^\d{5,}$/.test(String(id))) return null;
+    const username = (author && (author.username || author.short_name || author.url_username)) || null;
+    return { id: String(id), username, name: (author && author.name) || null };
+  }
+
   function identifyNode(node) {
     if (!node || node.nodeType !== 1) return [];
     const results = [];
@@ -1584,6 +1642,13 @@
             let ids = identifyNode(node);
             if (!ids.length) ids = identityFromHrefs(node);
             answers.push({ probe: r.probe, identities: ids });
+          }
+          // Per-comment: the only reliable source for a Facebook comment
+          // author's numeric id is the Relay store, keyed by the comment id the
+          // DOM layer read off the permalink. Answered alongside the node probes.
+          for (const cid of ((d.payload && d.payload.commentIds) || [])) {
+            const who = resolveCommentAuthor(cid);
+            answers.push({ commentId: cid, identities: who ? [who] : [] });
           }
           // The ticket must be echoed back: the isolated world correlates
           // request/response by it, and a missing ticket means the caller's
