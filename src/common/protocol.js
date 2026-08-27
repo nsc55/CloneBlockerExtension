@@ -316,6 +316,14 @@
     // default. It is a remembered preference rather than a fresh default each
     // time -- someone who unticks it means it.
     reportAlsoBlocks: true,
+    // One-click blocking. Off by default, because a confirmation is the right
+    // default for an irreversible-looking action against a named person. When
+    // on, the in-page block button acts at once -- report and block, the same
+    // as pressing Submit with "also block" ticked -- and shows an inline
+    // animation on the button and the post rather than opening the sheet. The
+    // sheet's optimism is what makes this safe to skip: a report that cannot
+    // send is kept and retried, and a failed block reaches the toolbar badge.
+    quickBlock: false,
     reportHoverDelayMs: 350,
     reporterId: '',          // set on first use; identifies repeat reports
     submitToken: '',         // only if the server was started with --submit-token

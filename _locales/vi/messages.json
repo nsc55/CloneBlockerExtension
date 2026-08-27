@@ -883,6 +883,22 @@
     "message": "Chặn",
     "description": "The block button the extension adds to each Facebook comment, sitting after Like and Reply. A verb; keep it to one short word."
   },
+  "options_quickBlock": {
+    "message": "Chặn chỉ với một cú nhấp (không cần xác nhận)",
+    "description": "A settings toggle. When on, the in-page block button acts immediately instead of opening the report dialog."
+  },
+  "options_quickBlockHint": {
+    "message": "Nút chặn sẽ hoạt động ngay khi bạn nhấn — vẫn báo cáo tài khoản, và hiển thị hiệu ứng ngắn thay vì hộp thoại.",
+    "description": "Hint under the one-click-block toggle explaining what changes."
+  },
+  "report_quickBlocking": {
+    "message": "Đang chặn…",
+    "description": "Shown on the block button while a one-click block is being carried out. Keep it to one short word."
+  },
+  "report_quickBlocked": {
+    "message": "Đã chặn",
+    "description": "Shown on the block button after a one-click block, before the post slides away. Keep it to one short word."
+  },
   "report_chip": {
     "message": "Báo cáo",
     "description": "The small button that appears when you hover a name on Facebook or Threads. Keep it short; it has to fit beside a name."

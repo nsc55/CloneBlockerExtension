@@ -47,7 +47,7 @@
   const BOOL_FIELDS = ['blockSeen', 'blockFromList', 'shareRegion',
     'hideEnabled', 'hideFeedPosts', 'hideComments',
     'platformBlockDryRun', 'allowRawNetworkFallback', 'experimentalOwnTab',
-    'reportUiEnabled', 'debug'];
+    'reportUiEnabled', 'quickBlock', 'debug'];
   const SELECT_FIELDS = ['uiLanguage', 'hideMode'];
 
   // `blockTags` is none of the above: an array of tags, rendered as one

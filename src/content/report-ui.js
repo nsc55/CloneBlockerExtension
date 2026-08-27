@@ -444,6 +444,127 @@
     if (modal) { modal.remove(); modal = null; }
   }
 
+  // ==========================================================================
+  // Quick mode: block in one click, no dialog.
+  // ==========================================================================
+
+  /** The reason a one-click block files under -- the same one the sheet shows
+   *  selected by default, so quick mode and the dialog agree. */
+  function quickReason() {
+    return (globalThis.CB_TAGS && globalThis.CB_TAGS[0]) || 'other';
+  }
+
+  function checkSvg(size) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', String(size || 14));
+    svg.setAttribute('height', String(size || 14));
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '3');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    const tick = document.createElementNS(ns, 'polyline');
+    tick.setAttribute('points', '20 6 9 17 4 12');
+    svg.appendChild(tick);
+    return svg;
+  }
+
+  /** The inline animation on the block button while a one-click block runs. */
+  function setQuickState(btnEl, state) {
+    if (!btnEl) return;
+    btnEl.style.pointerEvents = 'none';
+    const label = btnEl.querySelector('span');
+    const svg = btnEl.querySelector('svg');
+    if (state === 'working') {
+      btnEl.style.opacity = '1';
+      if (label) label.textContent = T('report_quickBlocking');
+      // A gentle pulse while the id resolves and the block is queued.
+      if (svg && svg.animate) {
+        try {
+          btnEl._cbPulse = svg.animate(
+            [{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }],
+            { duration: 700, iterations: Infinity });
+        } catch (e) { /* the animation is a nicety, not a requirement */ }
+      }
+      return;
+    }
+    // Settled -- report and block are on their way. Confirm, then the post
+    // collapses (dismissPost) so the confirmation is the last thing seen.
+    if (btnEl._cbPulse) { try { btnEl._cbPulse.cancel(); } catch (e) {} btnEl._cbPulse = null; }
+    if (svg) { try { svg.replaceWith(checkSvg(svg.getAttribute('width'))); } catch (e) {} }
+    if (label) label.textContent = T('report_quickBlocked');
+    btnEl.style.color = '#2e9e5b';
+    btnEl.style.opacity = '1';
+    if (btnEl.animate) {
+      try {
+        btnEl.animate(
+          [{ transform: 'scale(.8)' }, { transform: 'scale(1.14)' }, { transform: 'scale(1)' }],
+          { duration: 260, easing: 'ease-out' });
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  /**
+   * Block (and report) at once, with no sheet.
+   *
+   * The same side effects the sheet performs on Submit with "also block" ticked
+   * -- a report under the default reason, the id resolved, the block queued as
+   * user-initiated -- driven straight off the button. The animation and the
+   * post sliding away stand in for the confirmation. Guarded against a double
+   * fire, and it never blocks the viewer.
+   */
+  function quickBlockAction(ident, anchor, ctx, btnEl) {
+    const c = ctx || {};
+    const fresh = enrich(ident || {});
+    if ((!fresh.username && !fresh.profileId) || isViewer(fresh)) return;
+    if (btnEl) {
+      if (btnEl.getAttribute('data-cb-quick') === '1') return;   // already fired
+      btnEl.setAttribute('data-cb-quick', '1');
+    }
+    setQuickState(btnEl, 'working');
+
+    const payload = {
+      platform: PLATFORM,
+      viewerId: bridge.state.viewerId || null,
+      profileId: fresh.profileId,
+      username: fresh.username || (ident && ident.username) || null,
+      displayName: c.displayName || (anchor && displayNameFor(anchor)) || '',
+      url: c.postUrl || profileUrlFor(fresh),
+      reason: quickReason(),
+      note: '',
+      postUrl: c.postUrl || null,
+      postId: c.postId || null,
+      contentSummary: c.summary || null
+    };
+    void bridge.sw(P.SW.SUBMIT_REPORT, payload).catch(() => null);
+
+    void (async () => {
+      try {
+        const id = await resolveTargetId(fresh, c);
+        if (id) {
+          await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
+            platform: PLATFORM,
+            ids: [String(id)],
+            names: fresh.username ? { [String(id)]: fresh.username } : undefined,
+            warm: true,
+            userInitiated: true
+          });
+        }
+      } catch (e) { /* the report is queued regardless; a failed block hits the badge */ }
+      setQuickState(btnEl, 'done');
+      if (c.postEl) setTimeout(() => dismissPost(c.postEl), 550);
+    })();
+  }
+
+  /** One entry point for both in-page block buttons: the confirmation sheet,
+   *  or a one-click block when quick mode is on. */
+  function actOnTarget(ident, anchor, ctx, btnEl) {
+    if (settings.quickBlock) quickBlockAction(ident, anchor, ctx, btnEl);
+    else openModal(ident, anchor, ctx);
+  }
+
   /**
    * @param context optional {postUrl, summary, postId} when the report was
    *   raised from a specific post rather than from a bare profile link. The
@@ -1114,11 +1235,12 @@
         // Nothing useful to do, and reporting yourself is never intended.
         return;
       }
-      // The container comes along so the sheet can take the post off screen
-      // the moment somebody acts on it. `postEl` first, so a key of the same
-      // name in ctx could never quietly replace the node with a string.
-      openModal(ident, null, Object.assign(
-        { displayName: ctx.username ? '@' + ctx.username : '', postEl: container }, ctx));
+      // The container comes along so the sheet (or quick mode) can take the
+      // post off screen the moment somebody acts on it. `postEl` first, so a
+      // key of the same name in ctx could never quietly replace the node with
+      // a string.
+      actOnTarget(ident, null, Object.assign(
+        { displayName: ctx.username ? '@' + ctx.username : '', postEl: container }, ctx), btn);
     };
     btn.addEventListener('click', activate, true);
     btn.addEventListener('keydown', (e) => {
@@ -1283,11 +1405,11 @@
       if (isViewer(ident)) return;                 // never offer to block yourself
       const ctx = facebookCommentContext(article, found.anchor || authorAnchor);
       // postEl first so a same-named key in ctx cannot swap the node for a
-      // string; the sheet uses it to take the comment off screen on Block and
-      // to probe the MAIN world for the author's numeric id.
-      openModal(ident, found.anchor || authorAnchor,
+      // string; the sheet (or quick mode) uses it to take the comment off
+      // screen on Block and to probe for the author's numeric id.
+      actOnTarget(ident, found.anchor || authorAnchor,
         Object.assign({ postEl: article }, ctx,
-          { displayName: (found.anchor && displayNameFor(found.anchor)) || '' }));
+          { displayName: (found.anchor && displayNameFor(found.anchor)) || '' }), btn);
     };
     btn.addEventListener('click', activate, true);
     btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') activate(e); });
