@@ -63,7 +63,19 @@
   async function activeTab() {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs && tabs[0];
-    if (!tab || !/facebook\.com|threads\.(net|com)/.test(tab.url || '')) return null;
+    if (!tab) return null;
+    // pendingUrl: clicking the icon while the tab is still committing a
+    // navigation leaves url empty for exactly the moment this question gets
+    // asked, and the one answer this popup must never give over a loading
+    // threads.com tab is "This tab isn't Facebook or Threads".
+    //
+    // Hostname, not substring: a Google search FOR threads.com is not a
+    // Threads tab, and a substring test says it is -- the card then messages
+    // a tab with no content script in it and blames the page for not being
+    // ready.
+    let host = '';
+    try { host = new URL(tab.url || tab.pendingUrl || '').hostname; } catch (e) { /* not a web page */ }
+    if (!/(^|\.)(facebook\.com|threads\.net|threads\.com)$/.test(host)) return null;
     return tab;
   }
 
@@ -266,19 +278,40 @@
     const cold = counts.cold;
     $('queuedCount').textContent = String(counts.total);
 
-    const tabs = await siteTabCount();
+    const counted = await siteTabCount();
+    // Plus the one site tab the count cannot see: the active tab can match by
+    // pendingUrl while its navigation is still committing, and a query over
+    // committed URLs does not include it yet. Left out, the popup calls this
+    // tab a Threads tab and warns that no Threads tab is open, in one breath.
+    const tabs = counted == null ? null
+      : counted + (onSite && current.tab && !current.tab.url ? 1 : 0);
     // What an open tab could actually carry out right now. Cold targets do not
     // count while the list is switched off -- those are parked by a setting,
     // and telling their owner to go and open a tab would not move them.
     const actionable = counts.total - (modes.fromList ? 0 : cold);
     const blocking = on && (modes.seen || modes.fromList);
+    // A checkpoint or rate-limit pause is otherwise invisible: blocking
+    // silently stops and the extension just looks broken. Both notes below
+    // need it -- while the pause lasts, "blocking is running" is not a
+    // sentence either of them may write.
+    const pausedFor = stats.pausedUntil && stats.pausedUntil > Date.now()
+      ? Math.ceil((stats.pausedUntil - Date.now()) / 60000) : 0;
 
     // Where blocking is running, said with the count, whether or not this tab
-    // is one of the places. Silent when nothing is blocking at all or when the
-    // tab lookup failed: the note below has the honest answer in both cases.
+    // is one of the places. Silent when the tab lookup failed: a sentence that
+    // might be wrong is worse than none.
     const where = $('tabsNote');
-    if (!blocking || !tabs) {
+    if (!tabs) {
       where.textContent = '';
+    } else if (!blocking || pausedFor) {
+      // Nothing here says "running", because nothing is -- switched off or
+      // paused, and whose fault that is belongs to the note below. But with
+      // this tab unsupported, the headline above used to be the popup's only
+      // word on the subject -- and "This tab isn't Facebook or Threads" over
+      // a browser with a Threads tab plainly open reads as "the extension
+      // cannot see your Threads tab". It can; say so.
+      where.textContent = onSite ? ''
+        : tabs === 1 ? T('popup_tabsSeenOne') : T('popup_tabsSeenMany', tabs);
     } else if (onSite) {
       // The pacing is worth naming here. Someone who opens five tabs expecting
       // five times the speed should find out from the popup that the gate is
@@ -290,11 +323,6 @@
       where.textContent = tabs === 1 ? T('popup_tabsElsewhereOne')
         : T('popup_tabsElsewhereMany', tabs);
     }
-
-    // A checkpoint pause is otherwise invisible: blocking silently stops and
-    // the extension just looks broken, so say so plainly.
-    const pausedFor = stats.pausedUntil && stats.pausedUntil > Date.now()
-      ? Math.ceil((stats.pausedUntil - Date.now()) / 60000) : 0;
 
     const note = $('blockingNote');
     note.className = 'note';

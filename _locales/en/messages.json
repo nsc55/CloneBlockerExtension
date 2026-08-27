@@ -823,6 +823,14 @@
     "message": "Blocking is running here and in one other Facebook or Threads tab — still one block at a time across both, on purpose.",
     "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and exactly one other such tab is open."
   },
+  "popup_tabsSeenMany": {
+    "message": "Not here — but the extension does see the $1 Facebook or Threads tabs you have open.",
+    "description": "Note in the popup when the current tab is neither Facebook nor Threads, $1 such tabs are open elsewhere, and blocking is switched off or paused — so nothing can honestly be called running. It exists so the headline above it cannot read as 'the extension cannot see your Threads tab'. $1 is never 1."
+  },
+  "popup_tabsSeenOne": {
+    "message": "Not here — but the extension does see the one Facebook or Threads tab you have open.",
+    "description": "Note in the popup when the current tab is neither Facebook nor Threads, exactly one such tab is open elsewhere, and blocking is switched off or paused — so nothing can honestly be called running. It exists so the headline above it cannot read as 'the extension cannot see your Threads tab'."
+  },
   "popup_thisIsYou": {
     "message": "This is you",
     "description": "Status line under the profile name in the popup when the open profile is the signed-in user's own."
