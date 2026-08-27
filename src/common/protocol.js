@@ -397,21 +397,21 @@
      * and the build stops deciding.
      */
     experimentalOwnTab: false,
-    maxBlocksPerHour: 15,
-    maxBlocksPerDay: 60,
+    maxBlocksPerHour: 100,
+    maxBlocksPerDay: 1000,
     // Cold targets -- ones the server nominated that this browser has never
-    // seen -- get a much tighter ceiling of their own. A run of blocks against
-    // strangers is the pattern that draws a checkpoint; blocking someone whose
-    // profile is on the screen in front of you is not.
-    maxColdBlocksPerHour: 20,
-    minDelayMs: 20000,       // between cold blocks
-    maxDelayMs: 45000,
+    // seen -- get a ceiling of their own. A run of blocks against strangers is
+    // the pattern that draws a checkpoint; blocking someone whose profile is on
+    // the screen in front of you is not.
+    maxColdBlocksPerHour: 100,
+    minDelayMs: 4000,        // between cold blocks
+    maxDelayMs: 10000,
     warmMinDelayMs: 4000,    // between blocks of profiles that were on screen
-    warmMaxDelayMs: 11000,
+    warmMaxDelayMs: 10000,
 
     // How many ranked targets to take at a time. Whether to take any at all
     // is `mode`; this is only the batch size.
-    targetBudget: 25,
+    targetBudget: 100,
     // Sent with the blocklist request so the server can rank by where a clone
     // is actually operating. Coarse by construction: a time zone and a language
     // tag, both of which the browser already tells every site you visit.

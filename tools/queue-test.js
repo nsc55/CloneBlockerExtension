@@ -1202,8 +1202,8 @@ async function reset(settings) {
   const c1 = await send('sw:queue-claim', { platform: 'facebook' });
   check('the cold target is claimed once nothing warm is left',
     c1.target === '6000000001' && c1.warm === false, `${c1.target} warm=${c1.warm}`);
-  check('a cold block is paced far more slowly than a warm one',
-    c1.nextDelayMs >= 20000, String(c1.nextDelayMs));
+  check('a cold block is paced within its configured cold window',
+    c1.nextDelayMs >= 4000 && c1.nextDelayMs <= 10000, String(c1.nextDelayMs));
 
   // -- 9. the cold ceiling must not stop warm work --------------------------
   await send('sw:queue-result',
@@ -1492,20 +1492,29 @@ async function reset(settings) {
     const migrate = globalThis.CB_MIGRATE_CONFIG;
     const D = globalThis.CB_DEFAULT_SETTINGS;
 
-    // (a) old tree55 defaults present -> both moved forward, cache cleared.
+    // (a) old tree55 URLs plus CUSTOMISED pacing/caps -> URLs moved forward,
+    // pacing/caps force-reset to the shipped numbers, cache cleared, rev 2.
     store.local = {}; store.sync = { settings: {
       listUrl: 'https://cloneblocker.tree55.com/blocklist.json',
-      apiBase: 'https://cloneblocker.tree55.com/v1', platformBlockEnabled: true } };
+      apiBase: 'https://cloneblocker.tree55.com/v1', platformBlockEnabled: true,
+      maxBlocksPerHour: 15, maxBlocksPerDay: 60, maxColdBlocksPerHour: 20,
+      minDelayMs: 20000, maxDelayMs: 45000, warmMaxDelayMs: 11000, targetBudget: 25 } };
     store.local.backendHosts = { hosts: ['cloneblocker.tree55.com'], at: 1 };
     await migrate();
     check('migration moves a frozen tree55 apiBase onto the shipped default',
       store.sync.settings.apiBase === D.apiBase, store.sync.settings.apiBase);
     check('migration moves a frozen tree55 listUrl onto the shipped default',
       store.sync.settings.listUrl === D.listUrl, store.sync.settings.listUrl);
+    check('migration force-resets customised pacing and caps to the shipped numbers',
+      store.sync.settings.maxBlocksPerHour === 100 && store.sync.settings.maxBlocksPerDay === 1000 &&
+      store.sync.settings.maxColdBlocksPerHour === 100 && store.sync.settings.targetBudget === 100 &&
+      store.sync.settings.minDelayMs === 4000 && store.sync.settings.maxDelayMs === 10000 &&
+      store.sync.settings.warmMaxDelayMs === 10000,
+      JSON.stringify(store.sync.settings));
     check('migration drops the pointer cache pinned to the blocked host',
       !('backendHosts' in store.local), JSON.stringify(store.local.backendHosts));
     check('migration stamps the rev so it does not run twice',
-      store.local.configRev === 1, String(store.local.configRev));
+      store.local.configRev === 2, String(store.local.configRev));
 
     // (a2) NOTHING to rewrite (a device whose synced settings already migrated,
     // or a fresh install) -> absent values are left to follow the build, but
@@ -1515,8 +1524,9 @@ async function reset(settings) {
     store.local = {}; store.sync = { settings: { platformBlockEnabled: true } };
     store.local.backendHosts = { hosts: ['cloneblocker.tree55.com'], at: 1 };
     await migrate();
-    check('migration does not freeze an absent list/api default into storage',
-      !('listUrl' in store.sync.settings) && !('apiBase' in store.sync.settings),
+    check('migration does not freeze an absent list/api/pacing default into storage',
+      !('listUrl' in store.sync.settings) && !('apiBase' in store.sync.settings) &&
+      !('maxBlocksPerDay' in store.sync.settings) && !('minDelayMs' in store.sync.settings),
       JSON.stringify(store.sync.settings));
     check('migration clears the stale cache even when the settings patch is empty',
       !('backendHosts' in store.local), JSON.stringify(store.local.backendHosts));
@@ -2489,9 +2499,9 @@ async function reset(settings) {
       JSON.stringify(seeded));
     openGate();
     const coldClaim = await send('sw:queue-claim', { platform: 'facebook' });
-    check('what it seeded is cold: best rank first, paced slowly',
+    check('what it seeded is cold: best rank first, paced in the cold window',
       coldClaim.target === '8100000001' && coldClaim.warm === false &&
-      coldClaim.nextDelayMs >= 20000,
+      coldClaim.nextDelayMs >= 4000 && coldClaim.nextDelayMs <= 10000,
       `${coldClaim.target} warm=${coldClaim.warm} delay=${coldClaim.nextDelayMs}`);
 
     // An install written before modes existed. Its stored settings carry
@@ -2788,9 +2798,9 @@ async function reset(settings) {
     // claim too, or "the list keeps running" would be a claim about storage.
     openGate();
     const listOnlyClaim = await send('sw:queue-claim', { platform: 'facebook' });
-    check('and the cold work it seeded is handed out, paced as cold',
+    check('and the cold work it seeded is handed out, paced in the cold window',
       listOnlyClaim.target === '8200000001' && listOnlyClaim.warm === false &&
-      listOnlyClaim.nextDelayMs >= 20000,
+      listOnlyClaim.nextDelayMs >= 4000 && listOnlyClaim.nextDelayMs <= 10000,
       `${listOnlyClaim.target} warm=${listOnlyClaim.warm} delay=${listOnlyClaim.nextDelayMs}`);
 
     // The converse: what is in front of you, and nothing else.

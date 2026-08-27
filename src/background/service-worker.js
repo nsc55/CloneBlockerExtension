@@ -74,15 +74,23 @@ const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
 // blocked origin forever. This walks those frozen values onto the current
 // defaults, once, stamped by a rev in local storage.
 //
-// Only a value that is empty or a RECOGNISED former default is moved; a
+// rev 1 (URLs): only a value that is a RECOGNISED former default is moved; a
 // genuinely custom self-hosted URL is left alone. Every published install is
 // one of the former, so in the field this is the "force everyone onto the new
 // config" the rebuild needs, without stepping on somebody running their own
 // backend.
-const CONFIG_REV = 1;
+//
+// rev 2 (pacing and caps): a FORCED reset. Unlike the URLs, a value the owner
+// asked to standardise is overwritten whatever it was set to -- but only where
+// it was actually set. A key nobody touched is absent and already follows the
+// build, so it is left absent rather than frozen. Between the two, every
+// install ends up on the shipped numbers.
+const CONFIG_REV = 2;
 const SUPERSEDED_LIST_URLS = ['https://cloneblocker.tree55.com/blocklist.json'];
 const SUPERSEDED_API_BASES = ['https://cloneblocker.tree55.com/v1',
                               'https://cloneblocker.tree55.com/v1/'];
+const FORCE_RESET_KEYS = ['maxBlocksPerHour', 'maxBlocksPerDay', 'maxColdBlocksPerHour',
+  'minDelayMs', 'maxDelayMs', 'warmMinDelayMs', 'warmMaxDelayMs', 'targetBudget'];
 
 async function migrateConfig() {
   const rev = (await getLocal('configRev', 0)) | 0;
@@ -103,17 +111,22 @@ async function migrateConfig() {
   if (stored.apiBase && SUPERSEDED_API_BASES.some(u => cur(u) === cur(stored.apiBase))) {
     patch.apiBase = DEFAULTS.apiBase;
   }
+  // rev 2: force the pacing and caps back to the shipped numbers wherever the
+  // options page wrote them (it writes every one on any save), and only there
+  // -- an untouched key is absent and already follows the build.
+  for (const k of FORCE_RESET_KEYS) {
+    if (k in stored && stored[k] !== DEFAULTS[k]) patch[k] = DEFAULTS[k];
+  }
   if (Object.keys(patch).length) {
     await chrome.storage.sync.set({ [KEYS.SETTINGS]: Object.assign({}, stored, patch) });
   }
-  // Drop the pointer cache on EVERY device that migrates, not only when the
-  // settings patch was non-empty. Settings are synced; backendHosts is
-  // per-device. A second device receives already-migrated settings (so its
-  // patch is empty) yet still holds its OWN cache pinned to the blocked
-  // origin, and apiBase() would keep answering from it. Clearing here, once per
-  // device per rev, forces the next refresh to rediscover the relay-first
-  // pointer.
-  await chrome.storage.local.remove('backendHosts');
+  // Drop the pointer cache when crossing the rev-1 (URL) migration -- only a
+  // pre-1.0.4 install (rev 0) can be holding a cache pinned to the blocked
+  // origin. Settings are synced but backendHosts is per-device, so this runs
+  // even when the settings patch is empty (a second Chrome-sync device that
+  // received the migrated settings). A device already past rev 1 has a
+  // relay-first cache and needs no clear on a later rev.
+  if (rev < 1) await chrome.storage.local.remove('backendHosts');
   await setLocal('configRev', CONFIG_REV);
 }
 
