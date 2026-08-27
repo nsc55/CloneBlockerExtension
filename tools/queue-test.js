@@ -22,6 +22,8 @@ const store = { local: {}, sync: {} };
 function area(name) {
   return {
     async get(key) {
+      // get(null) is the real API's "everything", which the wipe relies on.
+      if (key === null || key === undefined) return clone(store[name]);
       const keys = Array.isArray(key) ? key : [key];
       const out = {};
       for (const k of keys) if (store[name][k] !== undefined) out[k] = clone(store[name][k]);
@@ -1485,65 +1487,73 @@ async function reset(settings) {
     chrome.permissions.contains = hadPermission;
   }
 
-  // Forced config migration: an existing install with the old tree55 default
-  // frozen in storage is walked onto the shipped defaults exactly once, its
-  // stale pointer cache dropped, and a genuine self-hoster left alone.
+  // Forced config migration, rev 3: a clean slate. Every install below the rev
+  // has its synced settings returned to the shipped defaults and its local
+  // storage wiped -- except the keys whose loss would cost the person
+  // something (reporting identity, unsent reports, who is already blocked,
+  // the worker's own tab, the tour flag) -- and the rev is stamped so it
+  // happens exactly once per device.
   {
     const migrate = globalThis.CB_MIGRATE_CONFIG;
     const D = globalThis.CB_DEFAULT_SETTINGS;
+    const SECRET = 'ab'.repeat(32);
 
-    // (a) old tree55 URLs plus CUSTOMISED pacing/caps -> URLs moved forward,
-    // pacing/caps force-reset to the shipped numbers, cache cleared, rev 2.
-    store.local = {}; store.sync = { settings: {
+    // (a) an upgraded install: a rev-2 stamp, frozen URLs and customised caps
+    // in sync, and a full set of local state including the junk template that
+    // broke Facebook blocking on 1.0.4.
+    store.local = {
+      configRev: 2,
+      learnedTemplate_facebook: { friendlyName: 'RTWebCallBlockSettingHooksQuery', docId: '9989124061109700' },
+      learnedTemplate_threads: { friendlyName: 'useTHUserBlockMutation', docId: '26803837702651619' },
+      learnedDocIds: { threads: { useTHUserBlockMutation: '26803837702651619' } },
+      docIdOverrides: { useTHUserBlockMutation: '26803837702651619' },
+      blocklist: { ids: ['1'], usernames: [] }, platformQueue: { facebook: [{ id: '2' }] },
+      stats: { attempts: 37 }, aliasMap: { a: 1 }, idNames: { b: 2 }, backendHosts: { hosts: ['x'] },
+      failures: {}, leases: {}, cooldowns: {}, blockLog: [{ id: '3' }], reportedCache: { k: 1 },
+      reporterSecret: SECRET, reportOutbox: [{ key: 'threads:9', payload: {}, tries: 0 }],
+      platformDone: { threads: ['4'] }, ownWorkTab: { id: 7 }, welcomedAt: 123
+    };
+    store.sync = { settings: {
       listUrl: 'https://cloneblocker.tree55.com/blocklist.json',
-      apiBase: 'https://cloneblocker.tree55.com/v1', platformBlockEnabled: true,
-      maxBlocksPerHour: 15, maxBlocksPerDay: 60, maxColdBlocksPerHour: 20,
-      minDelayMs: 20000, maxDelayMs: 45000, warmMaxDelayMs: 11000, targetBudget: 25 } };
-    store.local.backendHosts = { hosts: ['cloneblocker.tree55.com'], at: 1 };
+      apiBase: 'https://my.own.server/v1', maxBlocksPerHour: 15, platformBlockEnabled: false } };
     await migrate();
-    check('migration moves a frozen tree55 apiBase onto the shipped default',
-      store.sync.settings.apiBase === D.apiBase, store.sync.settings.apiBase);
-    check('migration moves a frozen tree55 listUrl onto the shipped default',
-      store.sync.settings.listUrl === D.listUrl, store.sync.settings.listUrl);
-    check('migration force-resets customised pacing and caps to the shipped numbers',
-      store.sync.settings.maxBlocksPerHour === 100 && store.sync.settings.maxBlocksPerDay === 1000 &&
-      store.sync.settings.maxColdBlocksPerHour === 100 && store.sync.settings.targetBudget === 100 &&
-      store.sync.settings.minDelayMs === 4000 && store.sync.settings.maxDelayMs === 10000 &&
-      store.sync.settings.warmMaxDelayMs === 10000,
-      JSON.stringify(store.sync.settings));
-    check('migration drops the pointer cache pinned to the blocked host',
-      !('backendHosts' in store.local), JSON.stringify(store.local.backendHosts));
+    check('migration returns synced settings to the shipped defaults wholesale',
+      JSON.stringify(store.sync.settings) === '{}', JSON.stringify(store.sync.settings));
+    const kept = Object.keys(store.local).sort().join(',');
+    check('migration wipes local storage except identity, outbox, done list, own tab and tour flag',
+      kept === 'configRev,ownWorkTab,platformDone,reportOutbox,reporterSecret,welcomedAt', kept);
+    check('the kept keys are kept intact',
+      store.local.reporterSecret === SECRET && store.local.reportOutbox.length === 1 &&
+      store.local.platformDone.threads[0] === '4' && store.local.ownWorkTab.id === 7 &&
+      store.local.welcomedAt === 123,
+      JSON.stringify({ outbox: store.local.reportOutbox, done: store.local.platformDone }));
     check('migration stamps the rev so it does not run twice',
-      store.local.configRev === 2, String(store.local.configRev));
+      store.local.configRev === 3, String(store.local.configRev));
+    const s = await send('sw:get-settings');
+    check('settings read after the wipe are the shipped defaults',
+      s.ok && s.settings.listUrl === D.listUrl && s.settings.apiBase === D.apiBase &&
+      s.settings.maxBlocksPerHour === D.maxBlocksPerHour &&
+      s.settings.platformBlockEnabled === D.platformBlockEnabled,
+      JSON.stringify({ listUrl: s.settings.listUrl, apiBase: s.settings.apiBase,
+                       hour: s.settings.maxBlocksPerHour, on: s.settings.platformBlockEnabled }));
 
-    // (a2) NOTHING to rewrite (a device whose synced settings already migrated,
-    // or a fresh install) -> absent values are left to follow the build, but
-    // the per-device pointer cache is STILL cleared. This is the two-device
-    // Chrome-sync case: settings arrive migrated, the patch is empty, yet the
-    // stale tree55-pinned cache must not survive.
-    store.local = {}; store.sync = { settings: { platformBlockEnabled: true } };
-    store.local.backendHosts = { hosts: ['cloneblocker.tree55.com'], at: 1 };
-    await migrate();
-    check('migration does not freeze an absent list/api/pacing default into storage',
-      !('listUrl' in store.sync.settings) && !('apiBase' in store.sync.settings) &&
-      !('maxBlocksPerDay' in store.sync.settings) && !('minDelayMs' in store.sync.settings),
-      JSON.stringify(store.sync.settings));
-    check('migration clears the stale cache even when the settings patch is empty',
-      !('backendHosts' in store.local), JSON.stringify(store.local.backendHosts));
-
-    // (b) a second run at the current rev changes nothing.
-    store.sync.settings.apiBase = 'https://someone.example/v1';
+    // (b) a second run at the current rev changes nothing, settings or data.
+    store.sync.settings = { apiBase: 'https://someone.example/v1' };
+    store.local.blocklist = { ids: ['5'], usernames: [] };
     await migrate();
     check('a migration already at the current rev is a no-op',
-      store.sync.settings.apiBase === 'https://someone.example/v1',
-      store.sync.settings.apiBase);
+      store.sync.settings.apiBase === 'https://someone.example/v1' &&
+      store.local.blocklist.ids[0] === '5',
+      JSON.stringify({ apiBase: store.sync.settings.apiBase, list: store.local.blocklist }));
 
-    // (c) a genuine custom apiBase (rev cleared) is spared.
-    store.local = {}; store.sync = { settings: { apiBase: 'https://my.own.server/v1' } };
+    // (c) a fresh install has nothing to wipe and is simply stamped, with
+    // nothing frozen into sync.
+    store.local = {}; store.sync = {};
     await migrate();
-    check('migration leaves a self-hosted apiBase untouched',
-      store.sync.settings.apiBase === 'https://my.own.server/v1',
-      store.sync.settings.apiBase);
+    check('a fresh install is stamped and left with nothing frozen',
+      store.local.configRev === 3 && Object.keys(store.local).length === 1 &&
+      JSON.stringify(store.sync.settings) === '{}',
+      JSON.stringify({ local: store.local, sync: store.sync }));
   }
 
   // A private list credential must reach ONLY the self-hosted primary, never a

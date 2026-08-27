@@ -540,9 +540,17 @@
 
       const friendly = params ? params.get('fb_api_req_friendly_name') : null;
       const rootField = headers && (headers['x-root-field-name'] || headers['X-Root-Field-Name']);
-      const isBlockish = BLOCKY.test(friendly || '') || BLOCKY.test(url) ||
-                         BLOCKY.test(rootField || '') ||
-                         (params && BLOCKY.test(params.get('variables') || ''));
+      // A persisted-query request names its operation, and the name is the
+      // whole test: it has to be a block MUTATION. Matching the word "block"
+      // anywhere -- name, URL, root field, even the variables -- is how
+      // RTWebCallBlockSettingHooksQuery, a read of Messenger's call-blocking
+      // setting that Facebook fires on every page load, was recorded as the
+      // learned block template (see isBlockMutationName). A request with no
+      // operation name is a REST call, and there the path has to say block.
+      const isBlockish = friendly
+        ? isBlockMutationName(friendly)
+        : ((BLOCKY.test(url) || BLOCKY.test(rootField || '')) &&
+           !/unblock/i.test(String(url) + String(rootField || '')));
       if (!isBlockish) return;
 
       // Guess which id in the variables was the target, so a replay knows what
@@ -771,6 +779,38 @@
     ]
   };
 
+  /**
+   * Is this operation name the block mutation, as opposed to something that
+   * merely has "block" in it?
+   *
+   * The distinction is the whole bug behind 1.0.4's "no data in GraphQL
+   * response" on Facebook. Facebook fires plenty of QUERIES whose name
+   * contains the word -- RTWebCallBlockSettingHooksQuery, a read of the
+   * Messenger call-blocking setting, goes out on every page load -- and the
+   * capture path matched on the word alone. One of those became the learned
+   * template, its doc_id was promoted into the ladder, and on any ordinary
+   * Facebook tab it was the ONLY candidate: every block attempt executed a
+   * settings query and failed on its answer ({viewer:{call_blocked_until}}).
+   *
+   * So a name is believed only if it is one of the operations known to be a
+   * block, or is spelled as one: "block" and "mutation" both present and
+   * "unblock" absent. Every known block operation on both platforms satisfies
+   * the spelling rule too.
+   */
+  function isBlockMutationName(name) {
+    const n = String(name || '');
+    if (!n || /unblock/i.test(n)) return false;
+    if ((KNOWN_BLOCK_OPS[PLATFORM] || []).some(k => n.indexOf(k.name) !== -1)) return true;
+    return /block/i.test(n) && /mutation/i.test(n);
+  }
+
+  /** A captured template is only ever USED if it carries a persisted-query id
+   *  under a name that passes the test above. Anything else is kept out of
+   *  the ladder and out of the doc_id candidates entirely. */
+  function usableTemplate(t) {
+    return !!(t && t.docId && isBlockMutationName(t.friendlyName));
+  }
+
   /** Candidate variable shapes for a Relay commitMutation, best-first.
    *  We try the shape whose known operation name matches the module, then the
    *  other known shapes, then generic fallbacks. Relay rejects a wrong shape
@@ -889,8 +929,16 @@
       return fail('server returned an HTML page, not an API response (likely signed out)',
                   { loggedOut: true });
     }
-    if (json && json.errors && json.errors.length) {
-      return fail(json.errors.map(e => e.message || e.summary).join('; '));
+    // One response, or several. Facebook's Relay network layer hands its
+    // subscriber an ARRAY of payloads -- [{data, extensions}] -- confirmed on
+    // a live page, where a plain query came back as exactly that. Reading
+    // only `json.data` meant every Facebook answer arriving this way, the
+    // successful ones included, was judged "no data in GraphQL response": the
+    // relay-network tier could not report a success on Facebook at all.
+    const payloads = Array.isArray(json) ? json : (json ? [json] : []);
+    const errored = payloads.find(p => p && p.errors && p.errors.length);
+    if (errored) {
+      return fail(errored.errors.map(e => e.message || e.summary).join('; '));
     }
 
     if (expect === 'rest') {
@@ -901,10 +949,12 @@
     }
 
     if (expect === 'graphql') {
-      // Relay answers with a data object; an empty or absent one is not success.
-      if (json && json.data && typeof json.data === 'object' && Object.keys(json.data).length) {
-        return { ok: true, strategy, status, detail: 'data returned' };
-      }
+      // Relay answers with a data object; an empty or absent one is not
+      // success. Any payload in the set carrying one counts -- a deferred
+      // response puts the data in its first chunk and bookkeeping in the rest.
+      const withData = payloads.find(p => p && p.data && typeof p.data === 'object' &&
+                                          !Array.isArray(p.data) && Object.keys(p.data).length);
+      if (withData) return { ok: true, strategy, status, detail: 'data returned' };
       return fail('no data in GraphQL response: ' + head);
     }
 
@@ -1052,7 +1102,11 @@
     const known = KNOWN_BLOCK_OPS[PLATFORM] || [];
     for (const k of known) add(k.name, learnedDocIds[k.name], 'learned');
     for (const k of known) add(k.name, docIdOverrides[k.name], 'supplied');
-    if (learnedTemplate && learnedTemplate.docId) {
+    // Only a template that names the block mutation gets its doc_id in here.
+    // A captured request that merely mentioned "block" used to be promoted
+    // regardless, and on a tab with no module, nothing learned and nothing
+    // published it was the whole ladder -- see isBlockMutationName.
+    if (usableTemplate(learnedTemplate)) {
       const friendly = String(learnedTemplate.friendlyName || '');
       const match = known.find(k => friendly.indexOf(k.name) !== -1);
       add(match ? match.name : friendly, learnedTemplate.docId, 'captured');
@@ -1427,7 +1481,12 @@
         case MSG.SET_CONFIG: {
           const p = d.payload || {};
           if (typeof p.debug === 'boolean') debug = p.debug;
-          if (p.learnedTemplate) learnedTemplate = p.learnedTemplate;
+          // A template that does not name the block mutation is refused at
+          // the door as well as everywhere it would be used: the stored one
+          // on an upgraded install is exactly the junk this guards against.
+          if ('learnedTemplate' in p) {
+            learnedTemplate = usableTemplate(p.learnedTemplate) ? p.learnedTemplate : null;
+          }
           // Server-pushed doc_id overrides let you hot-patch a Meta rotation
           // without shipping a new extension build. Validated here as well as
           // where the list is published and where the worker stores it: a
@@ -1582,7 +1641,7 @@
           // synthesising one, so it sits above the hand-built tier -- but it is
           // still a raw request, and only worth trying if it captured a real
           // persisted-query operation.
-          if (learnedTemplate && learnedTemplate.docId && allowRawNetworkFallback) {
+          if (usableTemplate(learnedTemplate) && allowRawNetworkFallback) {
             ladder.push({ name: 'learned', run: () => blockViaLearnedTemplate(targetId, learnedTemplate, dryRun) });
           }
           if (allowRawNetworkFallback) {

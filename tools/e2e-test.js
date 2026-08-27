@@ -418,6 +418,9 @@ function findChrome() {
   try {
     const setRes = await evalIn(browser, optSession, `
       (async () => {
+        // Ordered after the worker's one-time migration, which may be wiping
+        // storage on this load: a hub message waits for it, a raw write does not.
+        await new Promise(r => chrome.runtime.sendMessage({ type: 'sw:get-settings' }, r));
         await chrome.storage.sync.set({ settings: {
           listUrl: '${LIST_URL}',
           refreshMinutes: 60,

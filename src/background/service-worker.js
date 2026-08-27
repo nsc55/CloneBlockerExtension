@@ -67,66 +67,47 @@ const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
 // Forced config migration.
 //
 // getSettings() merges DEFAULTS UNDER stored, so a value the user never set
-// follows the build on its own. Two do not: listUrl has no UI but the dev
-// harness writes it, and apiBase is written back verbatim by the options page
-// whenever any advanced field is saved -- so an install that ever opened
-// Settings has the OLD default frozen in storage and would keep aiming at the
-// blocked origin forever. This walks those frozen values onto the current
-// defaults, once, stamped by a rev in local storage.
+// follows the build on its own. A value that WAS set does not, and nothing in
+// local storage does either -- which is how 1.0.4 failed on upgraded installs
+// while fresh ones worked. A "block request" template captured by an earlier
+// build (in fact RTWebCallBlockSettingHooksQuery, a Facebook settings query
+// with "block" in its name) sat in local storage, was promoted into the block
+// ladder, and on an ordinary Facebook tab was the only candidate: every block
+// executed a settings query and failed with "no data in GraphQL response".
+// Two earlier revs walked individual settings forward. This one stops
+// guessing which piece of stored state is the stale one.
 //
-// rev 1 (URLs): only a value that is a RECOGNISED former default is moved; a
-// genuinely custom self-hosted URL is left alone. Every published install is
-// one of the former, so in the field this is the "force everyone onto the new
-// config" the rebuild needs, without stepping on somebody running their own
-// backend.
-//
-// rev 2 (pacing and caps): a FORCED reset. Unlike the URLs, a value the owner
-// asked to standardise is overwritten whatever it was set to -- but only where
-// it was actually set. A key nobody touched is absent and already follows the
-// build, so it is left absent rather than frozen. Between the two, every
-// install ends up on the shipped numbers.
-const CONFIG_REV = 2;
-const SUPERSEDED_LIST_URLS = ['https://cloneblocker.tree55.com/blocklist.json'];
-const SUPERSEDED_API_BASES = ['https://cloneblocker.tree55.com/v1',
-                              'https://cloneblocker.tree55.com/v1/'];
-const FORCE_RESET_KEYS = ['maxBlocksPerHour', 'maxBlocksPerDay', 'maxColdBlocksPerHour',
-  'minDelayMs', 'maxDelayMs', 'warmMinDelayMs', 'warmMaxDelayMs', 'targetBudget'];
+// rev 3 (1.0.5): a CLEAN SLATE, once per device. Synced settings return to
+// the shipped defaults wholesale -- an empty object, so nothing is frozen and
+// everything follows the build -- and local storage is wiped except for the
+// keys whose loss would cost the person something real:
+//   reporterSecret  this install's reporting identity. A fresh one is a fresh
+//                   pseudonym with a newcomer's reputation, and the backend
+//                   rate-limits new pseudonyms per IP.
+//   reportOutbox    reports that have not reached the server yet. Losing one
+//                   loses the contribution somebody came here to make.
+//   platformDone    who has already been blocked. Without it every one of
+//                   them would be queued and blocked a second time.
+//   ownWorkTab      the tab the worker keeps; forgetting it would open another.
+//   welcomedAt      the tour has been seen.
+// Everything else -- the cached list, the queue, learned templates and
+// doc_ids, identity caches, stats, leases, cooldowns, alerts -- is rebuilt
+// from the list and the page within minutes. The earlier revs are subsumed (a
+// wipe walks every setting forward) and are no longer carried.
+const CONFIG_REV = 3;
+const WIPE_KEEP = ['reporterSecret', 'reportOutbox', 'platformDone', 'ownWorkTab', 'welcomedAt'];
 
 async function migrateConfig() {
   const rev = (await getLocal('configRev', 0)) | 0;
   if (rev >= CONFIG_REV) return;
-  const got = await chrome.storage.sync.get(KEYS.SETTINGS);
-  const stored = got[KEYS.SETTINGS] || {};
-  const patch = {};
-  const cur = (v) => String(v || '').replace(/\/+$/, '');
-  // Only a value that is PRESENT and a recognised former default is rewritten.
-  // An absent value is left absent -- getSettings merges DEFAULTS under stored,
-  // so it already follows this build; writing the current default into storage
-  // would freeze it and couple a future default change to remembering this
-  // exact literal. The value the options page froze (the old tree55 apiBase) is
-  // the one that actually needs walking forward, and it is present.
-  if (stored.listUrl && SUPERSEDED_LIST_URLS.some(u => cur(u) === cur(stored.listUrl))) {
-    patch.listUrl = DEFAULTS.listUrl;
-  }
-  if (stored.apiBase && SUPERSEDED_API_BASES.some(u => cur(u) === cur(stored.apiBase))) {
-    patch.apiBase = DEFAULTS.apiBase;
-  }
-  // rev 2: force the pacing and caps back to the shipped numbers wherever the
-  // options page wrote them (it writes every one on any save), and only there
-  // -- an untouched key is absent and already follows the build.
-  for (const k of FORCE_RESET_KEYS) {
-    if (k in stored && stored[k] !== DEFAULTS[k]) patch[k] = DEFAULTS[k];
-  }
-  if (Object.keys(patch).length) {
-    await chrome.storage.sync.set({ [KEYS.SETTINGS]: Object.assign({}, stored, patch) });
-  }
-  // Drop the pointer cache when crossing the rev-1 (URL) migration -- only a
-  // pre-1.0.4 install (rev 0) can be holding a cache pinned to the blocked
-  // origin. Settings are synced but backendHosts is per-device, so this runs
-  // even when the settings patch is empty (a second Chrome-sync device that
-  // received the migrated settings). A device already past rev 1 has a
-  // relay-first cache and needs no clear on a later rev.
-  if (rev < 1) await chrome.storage.local.remove('backendHosts');
+  // Settings first. An empty object is every default, resolved at read time
+  // by getSettings, so none of this build's numbers is written down here.
+  await chrome.storage.sync.set({ [KEYS.SETTINGS]: {} });
+  const all = await chrome.storage.local.get(null);
+  const drop = Object.keys(all || {}).filter(k => !WIPE_KEEP.includes(k));
+  if (drop.length) await chrome.storage.local.remove(drop);
+  // Stamped last: a worker that dies between the two writes above simply
+  // runs this again, and every step is safe to repeat.
   await setLocal('configRev', CONFIG_REV);
 }
 
@@ -2061,14 +2042,20 @@ async function openWelcomeOnce() {
   await chrome.tabs.create({ url: chrome.runtime.getURL('src/welcome/welcome.html') });
 }
 
+// The one-time migration goes first on every wakeup that does work, so the
+// wipe it may perform lands before anything below reads or writes storage.
 chrome.runtime.onInstalled.addListener((details) => {
-  installAlarm().catch(() => {});
-  refreshBlocklist(true).catch(() => {});
-  if (details && details.reason === 'install') openWelcomeOnce().catch(() => {});
+  ensureMigrated().then(() => {
+    installAlarm().catch(() => {});
+    refreshBlocklist(true).catch(() => {});
+    if (details && details.reason === 'install') openWelcomeOnce().catch(() => {});
+  });
 });
 chrome.runtime.onStartup.addListener(() => {
-  installAlarm().catch(() => {});
-  refreshBlocklist(false).catch(() => {});
+  ensureMigrated().then(() => {
+    installAlarm().catch(() => {});
+    refreshBlocklist(false).catch(() => {});
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2078,6 +2065,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (!msg || !msg.type) return;
 
   (async () => {
+    // Before anything reads storage: the one-time migration may be wiping it.
+    await ensureMigrated();
     const payload = msg.payload || {};
     switch (msg.type) {
       case P.SW.GET_SETTINGS:

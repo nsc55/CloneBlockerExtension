@@ -181,6 +181,11 @@ async function evalIn(cdp, sessionId, expression) {
 
   const applied = await evalIn(cdp, sessionId, `
     (async () => {
+      // The worker's one-time migration may be wiping storage on this very
+      // load. Every message through its hub waits for that to finish, so
+      // asking for the settings first guarantees ours are written AFTER the
+      // wipe rather than being wiped by it -- with blocking silently back on.
+      await new Promise(r => chrome.runtime.sendMessage({ type: 'sw:get-settings' }, r));
       await chrome.storage.sync.set({ settings: {
         // refreshMinutes is deliberately not pinned here: this session should
         // poll the way a real install does, and pinning it meant the shipped

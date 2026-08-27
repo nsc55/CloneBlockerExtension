@@ -103,6 +103,14 @@
       (async () => {
         const key = 'learnedTemplate_' + bridge.state.platform;
         const next = Object.assign({ at: Date.now() }, payload.capturedTemplate);
+        // Second gate on the same rule the MAIN world applies before posting:
+        // a request that does not name the block mutation is never persisted,
+        // whatever the other side sent. The stored template is what survives
+        // reloads and upgrades, so this is the door that matters most.
+        if (!globalThis.CB_IS_BLOCK_MUTATION_NAME(next.friendlyName)) {
+          log('ignoring captured request that is not a block mutation', next.friendlyName || next.url);
+          return;
+        }
         const existing = (await chrome.storage.local.get(key))[key];
 
         // Not every captured request is worth keeping. Rank them, and never let
@@ -204,6 +212,14 @@
       const key = 'learnedTemplate_' + bridge.state.platform;
       const got = await chrome.storage.local.get([key, 'docIdOverrides', 'learnedDocIds']);
       learnedTemplate = got[key] || null;
+      // A template an earlier build stored under the looser rule is dropped
+      // here, on the first page load that reads it, rather than handed to the
+      // MAIN world to refuse on every load from now on.
+      if (learnedTemplate && !globalThis.CB_IS_BLOCK_MUTATION_NAME(learnedTemplate.friendlyName)) {
+        log('dropping stored template that is not a block mutation', learnedTemplate.friendlyName);
+        learnedTemplate = null;
+        chrome.storage.local.remove(key).catch(() => {});
+      }
       // Published with the blocklist: the owner's lever for a doc_id rotation.
       docIdOverrides = got.docIdOverrides || {};
       // Seen working in this browser. Kept separate rather than merged, so the

@@ -477,6 +477,17 @@
   }
 
   globalThis.CB_KEYS = KEYS;
+  // Whether a captured GraphQL operation name is the block MUTATION, rather
+  // than anything with "block" in it. The isolated world's copy of the test
+  // the MAIN world applies (src/main/inject.js, isBlockMutationName): the two
+  // worlds cannot share code, and both have to refuse the same requests --
+  // Facebook's RTWebCallBlockSettingHooksQuery, a read of a Messenger setting
+  // fired on every page load, was captured as the block template and broke
+  // every Facebook block on the installs that held it.
+  globalThis.CB_IS_BLOCK_MUTATION_NAME = (name) => {
+    const n = String(name || '');
+    return !!n && !/unblock/i.test(n) && /block/i.test(n) && /mutation/i.test(n);
+  };
   globalThis.CB_IS_DEV_BUILD = isDevBuild;
   globalThis.CB_DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 })();
