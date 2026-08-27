@@ -1434,6 +1434,179 @@ async function reset(settings) {
     chrome.permissions.contains = hadPermission;
   }
 
+  // The default list now lives on a host this build has no permission for
+  // (raw.githubusercontent.com), read over CORS -- and it is a PUBLIC file, so
+  // it is trusted exactly like a mirror: a refresh must succeed with permission
+  // denied, but only for a SIGNED list. An unsigned list on the shipped default
+  // is an attacker who can write that file stripping the signature, and must be
+  // refused -- the exemption that accepts an unsigned list "from the primary"
+  // is for a self-hosted URL only.
+  {
+    const crypto = require('crypto');
+    const GH = globalThis.CB_DEFAULT_SETTINGS.listUrl;   // the shipped default
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pubRaw = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url');
+    const signed = (p) => ({ payload: p,
+      sig: crypto.sign(null, Buffer.from(JSON.stringify(p)), privateKey).toString('base64url'),
+      alg: 'ed25519' });
+    const list = { v: 2, updatedAt: new Date().toISOString(),
+                   ids: ['5200000001', '5200000002'], usernames: ['ghclone'], targets: [] };
+    const serve = (o) => async (url) => (String(url) === GH)
+      ? { ok: true, status: 200, headers: { get: () => null },
+          text: async () => JSON.stringify(o), json: async () => o }
+      : { ok: true, status: 200, headers: { get: () => null },
+          text: async () => '{}', json: async () => ({}) };
+
+    const hadKey = globalThis.CB_POINTER_KEY;
+    const hadPermission = chrome.permissions.contains;
+    globalThis.CB_POINTER_KEY = pubRaw;
+    chrome.permissions.contains = async () => false;
+
+    await reset();
+    await setSettings({ listUrl: GH });
+    global.fetch = serve(signed(list));
+    const r = await send('sw:refresh-now');
+    check('the GitHub default list refreshes, signed, with host permission denied',
+      r.ok && r.blocklist && r.blocklist.ids.includes('5200000001') &&
+      r.blocklist.verified === true && !r.needsPermission,
+      JSON.stringify({ ok: r.ok, needs: r.needsPermission, verified: r.blocklist && r.blocklist.verified }));
+
+    // An UNSIGNED list on the shipped default is refused, and the verified
+    // cache from the step above is left untouched.
+    global.fetch = serve({ v: 2, updatedAt: new Date(Date.now() + 3600000).toISOString(),
+                           ids: ['6660000666'], usernames: [], targets: [] });
+    const r2 = await send('sw:refresh-now');
+    check('an unsigned list on the GitHub default is refused',
+      !r2.ok && store.local.blocklist.ids.includes('5200000001') &&
+      !store.local.blocklist.ids.includes('6660000666'),
+      JSON.stringify({ ok: r2.ok, error: r2.error, ids: store.local.blocklist.ids }));
+
+    globalThis.CB_POINTER_KEY = hadKey;
+    chrome.permissions.contains = hadPermission;
+  }
+
+  // Forced config migration: an existing install with the old tree55 default
+  // frozen in storage is walked onto the shipped defaults exactly once, its
+  // stale pointer cache dropped, and a genuine self-hoster left alone.
+  {
+    const migrate = globalThis.CB_MIGRATE_CONFIG;
+    const D = globalThis.CB_DEFAULT_SETTINGS;
+
+    // (a) old tree55 defaults present -> both moved forward, cache cleared.
+    store.local = {}; store.sync = { settings: {
+      listUrl: 'https://cloneblocker.tree55.com/blocklist.json',
+      apiBase: 'https://cloneblocker.tree55.com/v1', platformBlockEnabled: true } };
+    store.local.backendHosts = { hosts: ['cloneblocker.tree55.com'], at: 1 };
+    await migrate();
+    check('migration moves a frozen tree55 apiBase onto the shipped default',
+      store.sync.settings.apiBase === D.apiBase, store.sync.settings.apiBase);
+    check('migration moves a frozen tree55 listUrl onto the shipped default',
+      store.sync.settings.listUrl === D.listUrl, store.sync.settings.listUrl);
+    check('migration drops the pointer cache pinned to the blocked host',
+      !('backendHosts' in store.local), JSON.stringify(store.local.backendHosts));
+    check('migration stamps the rev so it does not run twice',
+      store.local.configRev === 1, String(store.local.configRev));
+
+    // (a2) NOTHING to rewrite (a device whose synced settings already migrated,
+    // or a fresh install) -> absent values are left to follow the build, but
+    // the per-device pointer cache is STILL cleared. This is the two-device
+    // Chrome-sync case: settings arrive migrated, the patch is empty, yet the
+    // stale tree55-pinned cache must not survive.
+    store.local = {}; store.sync = { settings: { platformBlockEnabled: true } };
+    store.local.backendHosts = { hosts: ['cloneblocker.tree55.com'], at: 1 };
+    await migrate();
+    check('migration does not freeze an absent list/api default into storage',
+      !('listUrl' in store.sync.settings) && !('apiBase' in store.sync.settings),
+      JSON.stringify(store.sync.settings));
+    check('migration clears the stale cache even when the settings patch is empty',
+      !('backendHosts' in store.local), JSON.stringify(store.local.backendHosts));
+
+    // (b) a second run at the current rev changes nothing.
+    store.sync.settings.apiBase = 'https://someone.example/v1';
+    await migrate();
+    check('a migration already at the current rev is a no-op',
+      store.sync.settings.apiBase === 'https://someone.example/v1',
+      store.sync.settings.apiBase);
+
+    // (c) a genuine custom apiBase (rev cleared) is spared.
+    store.local = {}; store.sync = { settings: { apiBase: 'https://my.own.server/v1' } };
+    await migrate();
+    check('migration leaves a self-hosted apiBase untouched',
+      store.sync.settings.apiBase === 'https://my.own.server/v1',
+      store.sync.settings.apiBase);
+  }
+
+  // A private list credential must reach ONLY the self-hosted primary, never a
+  // fallback candidate. The compiled fallbacks include the author's own origin,
+  // which is host-permissioned — so a leaked Authorization would arrive there
+  // with no CORS preflight to stop it.
+  {
+    const PRIMARY = 'https://my.private.list/blocklist.json';
+    const MIRROR = 'https://cdn.example/blocklist.json';
+    const seen = [];
+    global.fetch = async (u, opts) => {
+      seen.push({ url: String(u), auth: ((opts || {}).headers || {}).authorization || null });
+      if (String(u) === PRIMARY) throw new Error('ECONNREFUSED');
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => '{}', json: async () => ({}) };
+    };
+    const hadPermission = chrome.permissions.contains;
+    chrome.permissions.contains = async () => true;   // self-hoster granted their own host
+    await reset();
+    await setSettings({ listUrl: PRIMARY, listAuthHeader: 'Bearer secret123' });
+    store.local.backendHosts = { hosts: ['my.private.list'], listMirrors: [MIRROR], at: Date.now() };
+    await send('sw:refresh-now');
+    const primaryCall = seen.find(c => c.url === PRIMARY);
+    const leaked = seen.filter(c => c.url !== PRIMARY && c.auth);
+    check('a private list credential is sent to the self-hosted primary',
+      !!primaryCall && primaryCall.auth === 'Bearer secret123',
+      JSON.stringify(primaryCall));
+    check('and never to any fallback candidate (origin, mirrors, relay)',
+      leaked.length === 0, JSON.stringify(leaked));
+    chrome.permissions.contains = hadPermission;
+  }
+
+  // An unchanged list on a SCHEDULED (non-forced) refresh short-circuits: the
+  // GitHub default cannot use an HTTP 304 (its ETag is not exposed over CORS),
+  // so the signed payload's updatedAt stands in. The reprocess-and-broadcast
+  // tail — including re-seeding cold targets — must be skipped when the list
+  // has not changed, and must still run when it has.
+  {
+    const URL = 'https://cdn.example/blocklist.json';
+    const withTargets = (updatedAt) => ({ v: 2, updatedAt, ids: ['7300000001'],
+      usernames: [], targets: [{ platform: 'threads', id: '7300000002', rank: 1 }] });
+    let served;
+    global.fetch = async (u) => (String(u) === URL)
+      ? { ok: true, status: 200, headers: { get: () => null },
+          text: async () => JSON.stringify(served), json: async () => served }
+      : { ok: true, status: 200, headers: { get: () => null },
+          text: async () => '{}', json: async () => ({}) };
+
+    // The refresh alarm kicks refreshBlocklist(false) off fire-and-forget, so
+    // settle after each fire before reading the queue.
+    const settle = () => new Promise(r => setTimeout(r, 80));
+
+    await reset({ platformBlockEnabled: true, maxColdBlocksPerHour: 50 });
+    await setSettings({ listUrl: URL, mode: 'active' });
+    served = withTargets('2026-08-27T10:00:00.000Z');
+    await send('sw:refresh-now');                          // forced: full reprocess, seeds the target
+    const seededFirst = ((store.local.platformQueue || {}).threads || []).length;
+    store.local.platformQueue = {};                        // clear it
+    await alarmHandler({ name: 'cb-refresh-blocklist' });  // scheduled, SAME updatedAt
+    await settle();
+    const afterUnchanged = ((store.local.platformQueue || {}).threads || []).length;
+    check('an unchanged scheduled refresh skips the reprocess tail (no re-seed)',
+      seededFirst >= 1 && afterUnchanged === 0,
+      JSON.stringify({ seededFirst, afterUnchanged }));
+
+    served = withTargets('2026-08-27T11:00:00.000Z');      // a genuinely newer list
+    await alarmHandler({ name: 'cb-refresh-blocklist' });  // scheduled, CHANGED updatedAt
+    await settle();
+    const afterChanged = ((store.local.platformQueue || {}).threads || []).length;
+    check('a changed scheduled refresh does reprocess and re-seed',
+      afterChanged >= 1, JSON.stringify({ afterChanged }));
+  }
+
   // These drive the real refresh/submit/status handlers with fetch stubbed.
   {
     const FS_URL = 'http://127.0.0.1:8080/blocklist.json';

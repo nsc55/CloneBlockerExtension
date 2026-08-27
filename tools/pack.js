@@ -297,12 +297,19 @@ const present = new Set(files);
   // cannot see the value it guards is worse than no check at all: it blocks a
   // release that is fine, and it would have been just as blind to one that
   // was not.
-  const base = /const BACKEND\s*=\s*'([^']+)'/.exec(proto);
+  // LIST_URL is `<HOST_CONST> + '/path'` now, and the host constant it is
+  // built from changed when the default moved to the GitHub mirror -- so this
+  // follows whatever identifier is on the right rather than naming one. A
+  // bare string literal is still accepted for the self-hoster case.
   const direct = /const LIST_URL\s*=\s*'([^']+)'/.exec(proto);
-  const joined = /const LIST_URL\s*=\s*BACKEND\s*\+\s*'([^']+)'/.exec(proto);
+  const joined = /const LIST_URL\s*=\s*([A-Z_][A-Z0-9_]*)\s*\+\s*'([^']+)'/.exec(proto);
+  const hostOf = (name) => {
+    const m = new RegExp('const ' + name + "\\s*=\\s*'([^']+)'").exec(proto);
+    return m ? m[1] : null;
+  };
+  const host = joined && hostOf(joined[1]);
   const listUrl = direct ? direct[1]
-    : (base && joined) ? base[1] + joined[1]
-    : null;
+    : (host ? host + joined[2] : null);
 
   report(!!listUrl && /^https:\/\//.test(listUrl),
     'the built-in list URL is https', listUrl || 'not found');

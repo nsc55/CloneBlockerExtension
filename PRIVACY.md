@@ -139,27 +139,30 @@ exactly what the page names and nothing else.
 
 ## What leaves your device, and to where
 
-Everything below goes to one backend: the server at the address built into the
-extension (`cloneblocker.tree55.com`), visible in `src/common/protocol.js` and
-in `manifest.json`. A build pointed somewhere else is a different copy of the
-extension.
+The project runs one backend, at `cloneblocker.tree55.com` — its address is
+built into the extension (visible in `src/common/protocol.js` and
+`manifest.json`), and a build pointed anywhere else is a different copy.
+Because Vietnamese ISPs block that address, the paths the extension uses **by
+default** are the ones that survive the block, and each is approved by a signed
+pointer document whose permitted hostnames also ship inside the extension:
 
-When that address cannot be reached — Vietnamese ISPs have blocked it — the
-extension may fall back, and only to places approved by a signed pointer
-document whose permitted hostnames also ship inside the extension:
-
-- **Reading the list** falls back to public signed copies on
-  `raw.githubusercontent.com` and `cdn.jsdelivr.net`. GitHub and jsDelivr see
-  an ordinary anonymous file request — the same request the main server would
-  have seen, which carries nothing about you.
-- **Filing a report** falls back to a relay we run on AWS in Singapore
-  (`h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com`), which forwards it
-  to the same server. The relay sees exactly what the server would have seen
-  — the report you typed, and your IP address, which it passes along so the
-  server's rate limits treat you as one person rather than lumping everyone
-  on the relay together. It stores nothing and adds nothing. It does mean
-  AWS infrastructure carries your report when the main address is blocked,
-  and this policy says so plainly rather than leaving it to be discovered.
+- **Reading the list.** By default your blocklist is fetched from a public,
+  signed copy on `raw.githubusercontent.com`, with `cdn.jsdelivr.net` and the
+  origin as fallbacks. GitHub and jsDelivr see an ordinary anonymous file
+  request that carries nothing about you. Every copy is signed and verified
+  against a key built into the extension, so a mirror that is stale, tampered
+  with, or hostile can only fail to verify — it can never hand you a different
+  list.
+- **Filing a report.** By default your report goes to a relay we run on AWS in
+  Singapore (`h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com`), which
+  forwards it to the backend. The relay sees exactly what the backend would
+  have seen — the report you typed, and your IP address, which it passes along
+  so the backend's rate limits treat you as one person rather than lumping
+  everyone together. It stores nothing and adds nothing. This does mean your
+  report **transits AWS infrastructure by default**; if the relay cannot be
+  reached the extension sends the report to the origin directly. Either way it
+  reaches the same backend and the same moderators, and this policy says so
+  plainly rather than leaving it to be discovered.
 
 ### Fetching the list
 

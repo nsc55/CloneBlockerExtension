@@ -64,7 +64,68 @@ const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
 // ---------------------------------------------------------------------------
 // storage helpers
 // ---------------------------------------------------------------------------
+// Forced config migration.
+//
+// getSettings() merges DEFAULTS UNDER stored, so a value the user never set
+// follows the build on its own. Two do not: listUrl has no UI but the dev
+// harness writes it, and apiBase is written back verbatim by the options page
+// whenever any advanced field is saved -- so an install that ever opened
+// Settings has the OLD default frozen in storage and would keep aiming at the
+// blocked origin forever. This walks those frozen values onto the current
+// defaults, once, stamped by a rev in local storage.
+//
+// Only a value that is empty or a RECOGNISED former default is moved; a
+// genuinely custom self-hosted URL is left alone. Every published install is
+// one of the former, so in the field this is the "force everyone onto the new
+// config" the rebuild needs, without stepping on somebody running their own
+// backend.
+const CONFIG_REV = 1;
+const SUPERSEDED_LIST_URLS = ['https://cloneblocker.tree55.com/blocklist.json'];
+const SUPERSEDED_API_BASES = ['https://cloneblocker.tree55.com/v1',
+                              'https://cloneblocker.tree55.com/v1/'];
+
+async function migrateConfig() {
+  const rev = (await getLocal('configRev', 0)) | 0;
+  if (rev >= CONFIG_REV) return;
+  const got = await chrome.storage.sync.get(KEYS.SETTINGS);
+  const stored = got[KEYS.SETTINGS] || {};
+  const patch = {};
+  const cur = (v) => String(v || '').replace(/\/+$/, '');
+  // Only a value that is PRESENT and a recognised former default is rewritten.
+  // An absent value is left absent -- getSettings merges DEFAULTS under stored,
+  // so it already follows this build; writing the current default into storage
+  // would freeze it and couple a future default change to remembering this
+  // exact literal. The value the options page froze (the old tree55 apiBase) is
+  // the one that actually needs walking forward, and it is present.
+  if (stored.listUrl && SUPERSEDED_LIST_URLS.some(u => cur(u) === cur(stored.listUrl))) {
+    patch.listUrl = DEFAULTS.listUrl;
+  }
+  if (stored.apiBase && SUPERSEDED_API_BASES.some(u => cur(u) === cur(stored.apiBase))) {
+    patch.apiBase = DEFAULTS.apiBase;
+  }
+  if (Object.keys(patch).length) {
+    await chrome.storage.sync.set({ [KEYS.SETTINGS]: Object.assign({}, stored, patch) });
+  }
+  // Drop the pointer cache on EVERY device that migrates, not only when the
+  // settings patch was non-empty. Settings are synced; backendHosts is
+  // per-device. A second device receives already-migrated settings (so its
+  // patch is empty) yet still holds its OWN cache pinned to the blocked
+  // origin, and apiBase() would keep answering from it. Clearing here, once per
+  // device per rev, forces the next refresh to rediscover the relay-first
+  // pointer.
+  await chrome.storage.local.remove('backendHosts');
+  await setLocal('configRev', CONFIG_REV);
+}
+
+// Run at most once per worker lifetime, and before any settings are read.
+let _migrated = null;
+function ensureMigrated() { return (_migrated = _migrated || migrateConfig().catch(() => {})); }
+// Exposed so the harness can drive it directly across independent store states;
+// getSettings only ever runs it through the once-per-lifetime memo above.
+globalThis.CB_MIGRATE_CONFIG = migrateConfig;
+
 async function getSettings() {
+  await ensureMigrated();
   const got = await chrome.storage.sync.get(KEYS.SETTINGS);
   const stored = got[KEYS.SETTINGS] || {};
   const merged = Object.assign({}, DEFAULTS, stored);
@@ -634,7 +695,13 @@ async function refreshBlocklist(force) {
   if (!settings.listUrl) {
     return { ok: false, error: T('sw_noListUrl') };
   }
-  if (!(await hasHostPermission(settings.listUrl))) {
+  // Host permission is only needed to put an Authorization header on the wire
+  // for a private, self-hosted list. A public list served with permissive CORS
+  // -- every shipped default and every mirror below -- is read without one,
+  // exactly as the mirror candidates in the loop already are. Gating the
+  // public case on a permission this build does not hold is what would have
+  // bricked the default the moment it moved to raw.githubusercontent.com.
+  if (settings.listAuthHeader && !(await hasHostPermission(settings.listUrl))) {
     return {
       ok: false,
       needsPermission: true,
@@ -681,6 +748,17 @@ async function refreshBlocklist(force) {
     if (!seen.has(u)) { seen.add(u); candidates.push(u); }
   }
 
+  // Whether the primary is a URL THIS PERSON chose, rather than the address
+  // shipped in the build. It decides what the primary is trusted to serve
+  // unsigned. The shipped default used to be our own origin, where "unsigned
+  // from the primary" meant "from us"; it is now a public GitHub file, where
+  // it would mean "from whoever can write that file". So the two trust
+  // exemptions the primary used to get -- serve an unsigned list, roll the
+  // cache back -- are held now to a genuinely self-hosted listUrl only. The
+  // shipped default is treated for trust exactly like a mirror: a verifying
+  // signature or nothing.
+  const selfHostedPrimary = settings.listUrl !== (globalThis.CB_LIST_URL || '');
+
   // The list is a static file with a real ETag, so an unchanged poll is an
   // If-None-Match away from a 304 with no body -- a few hundred bytes, no
   // database read, and at this point usually no origin request at all because
@@ -691,6 +769,12 @@ async function refreshBlocklist(force) {
   for (const url of candidates) {
     const isPrimary = url === settings.listUrl;
     const h = Object.assign({}, headers);
+    // A private list credential belongs to the ONE host the reader configured
+    // it for -- their own primary. The fallbacks are public mirrors and the
+    // author's origin; sending someone's Authorization to any of them leaks it,
+    // and the origin is host-permissioned so it would arrive with no CORS
+    // preflight to stop it. Strip it everywhere but the primary.
+    if (!isPrimary) delete h.authorization;
     // An ETag only means something to the host that issued it -- and only the
     // primary gets one at all. If-None-Match is not a CORS-safelisted header,
     // so sending it to a mirror turns the poll into a preflighted request,
@@ -717,9 +801,10 @@ async function refreshBlocklist(force) {
     const text = await r.text();
     try { body = JSON.parse(text); }
     catch (e) {
-      // Also accept a plain newline-delimited list of ids -- from the primary.
-      // A mirror that is not even JSON is not a mirror.
-      if (!isPrimary) { lastError = T('sw_notAList'); continue; }
+      // A plain newline-delimited list of ids is accepted only from a
+      // self-hosted primary. From the shipped default -- a public file -- or a
+      // mirror, a body that is not even JSON is not a list.
+      if (!(isPrimary && selfHostedPrimary)) { lastError = T('sw_notAList'); continue; }
       const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!lines.length) return { ok: false, error: T('sw_notAList') };
       body = lines;
@@ -731,14 +816,16 @@ async function refreshBlocklist(force) {
     //   signed + fails         refused from anywhere: a thing that claims a
     //                          signature and cannot back it is an attack, not
     //                          a self-hosted list
-    //   unsigned               accepted from the PRIMARY only, for lists
-    //                          served by somebody who is not us
+    //   unsigned               accepted from a SELF-HOSTED primary only -- a
+    //                          server the reader themselves pointed at. The
+    //                          shipped default is a public mirror now, so an
+    //                          unsigned list there is refused like any mirror.
     let ok = false;
     if (isEnvelope(body)) {
       const inner = await verifyEnvelope(body);
       if (inner) { body = inner; ok = true; verified = true; }
       else { await bumpStat('badSignatures'); lastError = T('sw_badSignature'); }
-    } else if (isPrimary) {
+    } else if (isPrimary && selfHostedPrimary) {
       ok = true;
     } else {
       lastError = T('sw_badSignature');
@@ -747,10 +834,11 @@ async function refreshBlocklist(force) {
 
     // A mirror may never roll the cache back. A verified list older than the
     // one already held is a stale mirror, or a replayed copy -- either way the
-    // cache wins. The primary is exempt: a server restored from backup is a
-    // legitimate rollback, and refusing it would strand every installation on
-    // a list the owner can no longer change.
-    if (!isPrimary && prev && prev.updatedAt && body && body.updatedAt &&
+    // cache wins. Only a SELF-HOSTED primary is exempt: a server the reader
+    // runs, restored from backup, is a legitimate rollback. The shipped
+    // default is a public file an attacker could pin to an old signed copy, so
+    // it gets the same anti-replay guard as any mirror.
+    if (!(isPrimary && selfHostedPrimary) && prev && prev.updatedAt && body && body.updatedAt &&
         Date.parse(body.updatedAt) < Date.parse(prev.updatedAt)) {
       const touched = Object.assign({}, prev, { fetchedAt: Date.now() });
       await setLocal(KEYS.BLOCKLIST, touched);
@@ -763,6 +851,24 @@ async function refreshBlocklist(force) {
   if (!res) {
     await bumpStat('fetchErrors');
     return { ok: false, error: lastError || T('sw_fetchFailed', 'unreachable') };
+  }
+
+  // The list did not change -- so skip the whole reprocess-and-broadcast tail,
+  // the same economy the HTTP 304 gives.
+  //
+  // That fast path relies on an ETag the host echoes back on a conditional
+  // poll. The default primary is now raw.githubusercontent.com, fetched over
+  // CORS without a host permission, and GitHub does not expose ETag to script
+  // there -- so no conditional request is possible and every scheduled poll
+  // gets a full 200. The signed payload carries its own version instead: an
+  // unchanged list has the same updatedAt, so treat that as a 304 would be.
+  // A forced refresh reprocesses regardless, exactly as it did before, since a
+  // 304 could never happen on force either.
+  if (!force && prev && prev.updatedAt && payload && payload.updatedAt &&
+      payload.updatedAt === prev.updatedAt) {
+    const touched = Object.assign({}, prev, { fetchedAt: Date.now(), source });
+    await setLocal(KEYS.BLOCKLIST, touched);
+    return { ok: true, unchanged: true, blocklist: touched };
   }
 
   const norm = normalizeBlocklist(payload);

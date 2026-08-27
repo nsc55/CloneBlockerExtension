@@ -181,8 +181,25 @@
   // asking and how often. Firestore rules could not, which is why none of this
   // is Firestore any more. See docs/BACKEND-PLAN.md.
   const BACKEND = 'https://cloneblocker.tree55.com';
-  const LIST_URL = BACKEND + '/blocklist.json';
-  const API_BASE = BACKEND + '/v1';
+
+  // The block-surviving copies, named up here because they are the DEFAULTS
+  // now, not just the fallbacks. The origin is the freshest source and the
+  // pointer's own home, but it is also the address an ISP blocks first, so a
+  // default that points there is a default that does not work for the people
+  // this is built for. The relay is an AWS Lambda that forwards reports to the
+  // origin; the mirrors are GitHub-backed copies the server pushes every few
+  // minutes. All are on shared infrastructure a national block cannot take
+  // down without large collateral, and every artifact they serve is signed.
+  const RELAY = 'https://h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com';
+  const MIRROR_RAW = 'https://raw.githubusercontent.com/nsc55/cloneblocker-mirror/published';
+  const MIRROR_JSDELIVR = 'https://cdn.jsdelivr.net/gh/nsc55/cloneblocker-mirror@published';
+
+  // The list defaults to the GitHub mirror and reports default to the relay:
+  // the shipped configuration works from inside the block, and a user who can
+  // reach the origin loses nothing but a few minutes of list freshness. The
+  // origin stays a fallback for both (see LIST_MIRRORS and the pointer).
+  const LIST_URL = MIRROR_RAW + '/blocklist.json';
+  const API_BASE = RELAY + '/v1';
 
   // Where to look when the backend cannot be reached at its usual address.
   //
@@ -200,15 +217,11 @@
   // cannot do the one job it exists for -- which is exactly what happened in
   // August 2026, when this array had one entry and Vietnamese ISPs blocked it.
   //
-  // The relay is an AWS Lambda that forwards a small allowlisted surface to
-  // the origin; the other two are GitHub-backed copies pushed from the server
-  // every few minutes. Shared developer infrastructure on purpose: blocking
-  // raw.githubusercontent or jsDelivr wholesale is disproportionately
-  // expensive for a national ISP. Every one of these serves the same SIGNED
-  // document, so none of them is trusted -- the signature is.
-  const RELAY = 'https://h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com';
-  const MIRROR_RAW = 'https://raw.githubusercontent.com/nsc55/cloneblocker-mirror/published';
-  const MIRROR_JSDELIVR = 'https://cdn.jsdelivr.net/gh/nsc55/cloneblocker-mirror@published';
+  // The origin is read first here on purpose: it is signed like every mirror,
+  // and it is where a pointer naming a FRESH relay or mirror would come from,
+  // so a build whose compiled hosts have all been blocked can still be handed
+  // a new one. A blocked install simply fails this first entry and reads the
+  // pointer from the relay, which is the second.
   const POINTER_URLS = [
     BACKEND + '/backend.json',
     RELAY + '/backend.json',
@@ -216,15 +229,17 @@
     MIRROR_JSDELIVR + '/backend.json'
   ];
 
-  // Where the LIST can be read when the primary and the cached pointer are
-  // both out of reach -- the floor under the pointer mechanism. A fresh
-  // install behind a block has no cached pointer to name a mirror, and the
-  // pointer itself may be what the block took away. Tried after the pointer's
-  // own mirrors; believed only with a verifying signature, like any mirror.
+  // The list fallbacks, after the compiled primary (LIST_URL, the GitHub
+  // mirror) and after any mirrors a signed pointer named. All four public
+  // copies are listed; refreshBlocklist drops whichever one equals the
+  // primary, so this stays correct whatever listUrl a self-hoster sets. The
+  // origin is last: freshest, but the one an ISP blocks, so it is where a
+  // blocked install ends up only if every shared copy has failed.
   const LIST_MIRRORS = [
-    RELAY + '/blocklist.json',
     MIRROR_RAW + '/blocklist.json',
-    MIRROR_JSDELIVR + '/blocklist.json'
+    MIRROR_JSDELIVR + '/blocklist.json',
+    RELAY + '/blocklist.json',
+    BACKEND + '/blocklist.json'
   ];
 
   // The hostnames this build will talk to, whatever a signed pointer says.
