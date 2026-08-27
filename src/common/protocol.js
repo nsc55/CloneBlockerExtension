@@ -197,9 +197,34 @@
   // design did not have, and the thing most worth getting right here.
   // Read in order, first answer wins. More than one host on purpose: if the
   // pointer is only reachable at the address that has just been blocked, it
-  // cannot do the one job it exists for.
+  // cannot do the one job it exists for -- which is exactly what happened in
+  // August 2026, when this array had one entry and Vietnamese ISPs blocked it.
+  //
+  // The relay is an AWS Lambda that forwards a small allowlisted surface to
+  // the origin; the other two are GitHub-backed copies pushed from the server
+  // every few minutes. Shared developer infrastructure on purpose: blocking
+  // raw.githubusercontent or jsDelivr wholesale is disproportionately
+  // expensive for a national ISP. Every one of these serves the same SIGNED
+  // document, so none of them is trusted -- the signature is.
+  const RELAY = 'https://h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com';
+  const MIRROR_RAW = 'https://raw.githubusercontent.com/nsc55/cloneblocker-mirror/published';
+  const MIRROR_JSDELIVR = 'https://cdn.jsdelivr.net/gh/nsc55/cloneblocker-mirror@published';
   const POINTER_URLS = [
-    BACKEND + '/backend.json'
+    BACKEND + '/backend.json',
+    RELAY + '/backend.json',
+    MIRROR_RAW + '/backend.json',
+    MIRROR_JSDELIVR + '/backend.json'
+  ];
+
+  // Where the LIST can be read when the primary and the cached pointer are
+  // both out of reach -- the floor under the pointer mechanism. A fresh
+  // install behind a block has no cached pointer to name a mirror, and the
+  // pointer itself may be what the block took away. Tried after the pointer's
+  // own mirrors; believed only with a verifying signature, like any mirror.
+  const LIST_MIRRORS = [
+    RELAY + '/blocklist.json',
+    MIRROR_RAW + '/blocklist.json',
+    MIRROR_JSDELIVR + '/blocklist.json'
   ];
 
   // The hostnames this build will talk to, whatever a signed pointer says.
@@ -210,7 +235,8 @@
   // review. So the worst a compromised key achieves is choosing among hosts
   // the build already trusted.
   const POINTER_HOSTS = [
-    'cloneblocker.tree55.com'
+    'cloneblocker.tree55.com',
+    'h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com'
   ];
 
   // Ed25519 public key, raw 32 bytes, base64url. Generated once with
@@ -408,6 +434,7 @@
 
   globalThis.CB_POINTER_URLS = POINTER_URLS;
   globalThis.CB_POINTER_HOSTS = POINTER_HOSTS;
+  globalThis.CB_LIST_MIRRORS = LIST_MIRRORS;
   globalThis.CB_POINTER_KEY = POINTER_KEY;
   globalThis.CB_BACKEND = BACKEND;
   globalThis.CB_LIST_URL = LIST_URL;

@@ -197,11 +197,11 @@ Fetching the list sends nothing about you — no identifier, no location.
 Filing a report sends only what is in the form, and your own account ID is
 hashed before it leaves the browser. Nothing about you as a reporter is ever
 published. No analytics, no ads, no third parties.
-Full policy: https://cloneblocker.tree55.com/privacy
+Full policy: https://github.com/nsc55/CloneBlockerExtension/blob/main/PRIVACY.md
 
 In English and Vietnamese, following your browser's language. Requires Chrome
 120+ and a Facebook or Threads account. Free and open source:
-https://github.com/nsc55/CloneBlocker
+https://github.com/nsc55/CloneBlockerExtension
 
 Not affiliated with, endorsed by, or connected to Meta, Facebook or Threads.
 ```
@@ -243,11 +243,11 @@ Tải danh sách không gửi gì về bạn — không định danh, không v�
 chỉ gửi những gì trong biểu mẫu, và ID tài khoản của bạn được băm trước khi
 rời trình duyệt. Không điều gì về bạn với tư cách người báo cáo từng được công
 bố. Không thống kê, không quảng cáo, không bên thứ ba.
-Chính sách đầy đủ: https://cloneblocker.tree55.com/privacy
+Chính sách đầy đủ: https://github.com/nsc55/CloneBlockerExtension/blob/main/PRIVACY.md
 
 Tiếng Việt và tiếng Anh, theo ngôn ngữ trình duyệt của bạn. Cần Chrome 120 trở
 lên và một tài khoản Facebook hoặc Threads. Miễn phí, mã nguồn mở:
-https://github.com/nsc55/CloneBlocker
+https://github.com/nsc55/CloneBlockerExtension
 
 Không liên kết, không được bảo trợ và không có quan hệ gì với Meta, Facebook
 hay Threads.
@@ -273,9 +273,9 @@ say plainly what the phrase means, so nobody has to infer it from a cow.
 
 | Field | Value |
 |---|---|
-| Homepage | `https://github.com/nsc55/CloneBlocker` |
-| Support | `https://github.com/nsc55/CloneBlocker/issues` |
-| **Privacy policy** | `https://cloneblocker.tree55.com/privacy` — see §5 |
+| Homepage | `https://github.com/nsc55/CloneBlockerExtension` |
+| Support | `https://github.com/nsc55/CloneBlockerExtension/issues` |
+| **Privacy policy** | `https://github.com/nsc55/CloneBlockerExtension/blob/main/PRIVACY.md` — see §5 |
 
 ---
 
@@ -517,19 +517,16 @@ listing, it belongs here too, and both change together.
 Required, because the extension collects user data. It must be a live URL in
 the dashboard field.
 
-**Use `https://cloneblocker.tree55.com/privacy`.** The project's own Hosting
-serves the policy in English and Vietnamese — the bare URL opens in English,
-which is what a reviewer needs, and the toggle (or a choice remembered from
-the register page) switches it. `PRIVACY.md` in the repository root stays the
-policy of record: the page mirrors it, and `tools/check.js` fails the build
-when the two "Last updated" dates disagree, so neither can move without the
-other. Terms (`/tos`) and an FAQ (`/faq`) sit beside it, and the register
-page links all three from its footer.
-
-The page must actually be deployed before the URL goes into the dashboard —
-`npm run deploy` — and the URL is worth opening in a clean browser first.
-GitHub's render of `PRIVACY.md` remains a working fallback
-(`https://github.com/nsc55/CloneBlocker/blob/main/PRIVACY.md`).
+**Use `https://github.com/nsc55/CloneBlockerExtension/blob/main/PRIVACY.md`**
+— since August 2026, when Vietnamese ISPs blocked tree55.com. A policy URL
+that never loads for the extension's own audience (or for a reviewer routing
+through Vietnam) fails the one job the field exists for, and GitHub's render
+of the policy of record is reachable from everywhere. The hosted page
+(`https://cloneblocker.tree55.com/privacy`) is the nicer read where it loads —
+English and Vietnamese, with terms (`/tos`) and an FAQ (`/faq`) beside it —
+and stays linked from the policy itself; `tools/check.js` still fails the
+build when the page and `PRIVACY.md` disagree on their "Last updated" dates,
+so neither can move without the other.
 
 ---
 

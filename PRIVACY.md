@@ -1,6 +1,6 @@
 # Privacy policy — Clone Blocker
 
-*Last updated: 23 August 2026*
+*Last updated: 27 August 2026*
 
 *Also served, with a Vietnamese translation, at
 <https://cloneblocker.tree55.com/privacy>. This file is the policy of record;
@@ -17,9 +17,8 @@ configured by you. There is no analytics, no telemetry, no advertising and no
 crash reporting. Fetching the blocklist sends nothing about you at all, so the
 only thing that ever leaves your machine is a report you deliberately file.
 Those reports land in a database on a server the project runs itself: the
-hosting provider is
-the hosting and infrastructure provider, in the same way a rented server's
-datacenter would be, and the project's security rules make reports readable by
+hosting provider and the network in front of it are infrastructure, in the
+same way a rented server's datacenter would be, and reports are readable by
 the project's admin accounts — the maintainer of whichever backend the copy you
 installed points at — and by nobody else at all.
 
@@ -140,11 +139,27 @@ exactly what the page names and nothing else.
 
 ## What leaves your device, and to where
 
-Everything below goes **only** to one backend: the server at the
-address built into the extension (`cloneblocker.tree55.com`). It is not a setting, so
-there is nothing to check and nothing that can be changed underneath you — a
-build pointed somewhere else is a different copy of the extension, with that
-address visible in `src/common/protocol.js` and in `manifest.json`.
+Everything below goes to one backend: the server at the address built into the
+extension (`cloneblocker.tree55.com`), visible in `src/common/protocol.js` and
+in `manifest.json`. A build pointed somewhere else is a different copy of the
+extension.
+
+When that address cannot be reached — Vietnamese ISPs have blocked it — the
+extension may fall back, and only to places approved by a signed pointer
+document whose permitted hostnames also ship inside the extension:
+
+- **Reading the list** falls back to public signed copies on
+  `raw.githubusercontent.com` and `cdn.jsdelivr.net`. GitHub and jsDelivr see
+  an ordinary anonymous file request — the same request the main server would
+  have seen, which carries nothing about you.
+- **Filing a report** falls back to a relay we run on AWS in Singapore
+  (`h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com`), which forwards it
+  to the same server. The relay sees exactly what the server would have seen
+  — the report you typed, and your IP address, which it passes along so the
+  server's rate limits treat you as one person rather than lumping everyone
+  on the relay together. It stores nothing and adds nothing. It does mean
+  AWS infrastructure carries your report when the main address is blocked,
+  and this policy says so plainly rather than leaving it to be discovered.
 
 ### Fetching the list
 
@@ -312,9 +327,9 @@ The data is not sold, rented, or shared. Three parties can see some of it:
 
 - **The owner of the backend this build points at.** For the published
   extension that is this project's maintainer, who can read the reports you
-  file (the security rules make them readable only by the uid allowlist that
-  holds the project's admin accounts — today one person, who can sign in two
-  ways — and the reporter identity is only a truncated hash, see above). A
+  file (the server makes them readable only by the project's admin accounts —
+  today one person, who can sign in two ways — and the reporter identity is
+  only a truncated hash, see above). A
   build you compile against your own server sends them to you
   instead. This policy can only speak for the code, not for what any backend
   operator does with what they receive.
@@ -325,8 +340,8 @@ The data is not sold, rented, or shared. Three parties can see some of it:
   infrastructure the server runs on. The data sits in a database file on that
   server, subject to the provider's own
   terms and privacy commitments, the same way any hosting provider holds the
-  disks your data is on. Google is not sent anything by the extension itself;
-  it hosts what the project stores.
+  disks your data is on. The extension sends them nothing itself; they host
+  what the project stores.
 
 No analytics service, ad network, or other third party appears anywhere.
 

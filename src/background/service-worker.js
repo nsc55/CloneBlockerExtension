@@ -664,10 +664,22 @@ async function refreshBlocklist(force) {
   // the loop below: a mirror is believed ONLY when the list it serves carries
   // a signature this build can verify. A mirror can be stale, hostile, or
   // somebody else's entirely, and the worst it can do is fail to verify.
+  // The refresh cycle is also when the pointer gets its look-in. Fire and
+  // forget: a pointer fetch that has to walk four hosts must never hold up
+  // the list, and next cycle is soon enough to benefit from what it learns.
+  refreshPointerIfStale().catch(() => {});
+
   const pointerRec = await getLocal('backendHosts', null);
   const mirrors = (pointerRec && Array.isArray(pointerRec.listMirrors))
-    ? pointerRec.listMirrors.filter(u => u !== settings.listUrl) : [];
-  const candidates = [settings.listUrl].concat(mirrors);
+    ? pointerRec.listMirrors : [];
+  // Compiled mirrors after the pointer's: the pointer can name fresher ones
+  // without a review, and the compiled ones are the floor a fresh install
+  // behind a block stands on when no pointer was ever fetched.
+  const seen = new Set([settings.listUrl]);
+  const candidates = [settings.listUrl];
+  for (const u of mirrors.concat(globalThis.CB_LIST_MIRRORS || [])) {
+    if (!seen.has(u)) { seen.add(u); candidates.push(u); }
+  }
 
   // The list is a static file with a real ETag, so an unchanged poll is an
   // If-None-Match away from a 304 with no body -- a few hundred bytes, no
@@ -679,8 +691,13 @@ async function refreshBlocklist(force) {
   for (const url of candidates) {
     const isPrimary = url === settings.listUrl;
     const h = Object.assign({}, headers);
-    // An ETag only means something to the host that issued it.
-    if (!(prev && prev.etag && prev.source === url && !force)) delete h['if-none-match'];
+    // An ETag only means something to the host that issued it -- and only the
+    // primary gets one at all. If-None-Match is not a CORS-safelisted header,
+    // so sending it to a mirror turns the poll into a preflighted request,
+    // and neither raw.githubusercontent nor jsDelivr answers that preflight
+    // (verified 2026-08-27: raw 403s OPTIONS outright, jsDelivr omits
+    // allow-headers). An unconditional mirror GET always works.
+    if (!(isPrimary && prev && prev.etag && prev.source === url && !force)) delete h['if-none-match'];
 
     let r;
     try {
@@ -2271,11 +2288,32 @@ async function refreshPointer() {
   return null;
 }
 
+/**
+ * Refresh the pointer when the cached one is old enough to matter.
+ *
+ * Called from the refresh cycle rather than owning an alarm: the pointer's
+ * whole job is to be already-cached when the primary disappears, and riding
+ * the ten-minute refresh keeps it at most an hour stale at no extra wakeup.
+ * This call is what was missing for a year -- refreshPointer() used to run
+ * only when settings.apiBase was empty, and the default is not empty, so no
+ * default install ever fetched a pointer. See apiBase() below.
+ */
+async function refreshPointerIfStale() {
+  const cached = await getLocal('backendHosts', null);
+  if (!cached || (Date.now() - (cached.at || 0)) > POINTER_TTL_MS) {
+    await refreshPointer();
+  }
+}
+
 async function apiBase(settings) {
   const s = settings || await getSettings();
-  // Somebody self-hosting has said where their server is; nothing below should
-  // second-guess them.
-  if (s.apiBase) return s.apiBase.replace(/\/+$/, '');
+  // Somebody self-hosting has said where their server is; nothing below
+  // should second-guess them. The COMPILED default is not such a statement:
+  // it is what every untouched install carries, and what the options page
+  // writes back verbatim when any field on it is saved -- treating it as an
+  // override is what kept the pointer machinery dead on default installs.
+  const custom = s.apiBase && s.apiBase.replace(/\/+$/, '');
+  if (custom && custom !== globalThis.CB_API_BASE) return custom;
 
   // The host this browser last reached. A working answer beats rediscovering
   // one, and it is what carries the extension through a pointer outage.
@@ -2289,6 +2327,24 @@ async function apiBase(settings) {
     refreshPointer().catch(() => {});
   }
   return globalThis.CB_API_BASE || null;
+}
+
+/**
+ * May this build send reports to the API at `base`?
+ *
+ * Two doors. A host permission covers the tree55 origins in the manifest, as
+ * it always has. The compiled POINTER_HOSTS pin covers the relay: a pinned
+ * host is one this build already trusts with reports, and the request itself
+ * rides plain CORS -- the relay answers its own preflights -- so no manifest
+ * permission is involved, which is what lets this build reach users as a
+ * silent update instead of a disable-until-reapproved prompt. An arbitrary
+ * custom apiBase with neither stays refused, exactly as it was before.
+ */
+async function mayContact(base) {
+  if (await hasHostPermission(base + '/')) return true;
+  try {
+    return (globalThis.CB_POINTER_HOSTS || []).includes(new URL(base).hostname);
+  } catch (e) { return false; }
 }
 
 /**
@@ -2526,7 +2582,7 @@ async function submitReport(payload, opts) {
   const settings = await getSettings();
   const base = await apiBase(settings);
   if (!base) return { ok: false, error: T('sw_noServer') };
-  if (!(await hasHostPermission(base + '/'))) {
+  if (!(await mayContact(base))) {
     return { ok: false, needsPermission: true, error: T('sw_noReportPermission') };
   }
 
@@ -2745,7 +2801,7 @@ async function reportStatus(q, force) {
   const localStatus = blocked ? 'approved' : (hit ? hit.status || 'pending' : null);
 
   // Nothing to ask, or nobody to ask as: the local answer is the answer.
-  if (!base || !reporter || !(await hasHostPermission(base + '/'))) {
+  if (!base || !reporter || !(await mayContact(base))) {
     return { ok: true, key, status: localStatus, count: hit ? hit.count || 0 : 0,
              blocked, mine: !!(hit && hit.mine), duplicate: !!(hit && hit.duplicate) };
   }

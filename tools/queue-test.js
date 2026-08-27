@@ -1359,6 +1359,9 @@ async function reset(settings) {
     await reset({ platformBlockEnabled: true });
     await setSettings({ listUrl: CDN, apiBase: FS });
     const r = await send('sw:refresh-now');
+    // The refresh also kicks an unawaited pointer walk; let it finish before
+    // reading the request log, or its tail lands in the next block's stub.
+    await new Promise(res => setTimeout(res, 25));
     check('a plain JSON list on the CDN decodes',
       r.ok && r.blocklist.ids.includes('5100000001') &&
       r.blocklist.usernames.includes('someclone'),
@@ -1368,15 +1371,21 @@ async function reset(settings) {
     check('the published tag survives the CDN shape',
       (r.blocklist.idTags || {})['5100000001'] === 'redbull',
       JSON.stringify(r.blocklist.idTags));
-    check('reading the list touches nothing but the static file',
-      seen.filter(c => c.method === 'GET').every(c => c.url.startsWith(CDN)),
-      JSON.stringify(seen.map(c => c.url)));
+    // The list poll, and since 1.0.4 the pointer poll riding alongside it,
+    // may only ever ask for FIXED urls compiled into the build or configured
+    // by the owner of this browser -- never one shaped by who is asking.
+    {
+      const FIXED = [CDN].concat(globalThis.CB_POINTER_URLS || []);
+      check('reading the list touches nothing but fixed static files',
+        seen.filter(c => c.method === 'GET').every(c => FIXED.includes(c.url)),
+        JSON.stringify(seen.map(c => c.url)));
+    }
     // A static file cannot use a ranking hint, and on a CDN a per-user query
     // string is the difference between an edge-cached 304 and a fresh
     // transfer per install per hour -- besides putting the reader's timezone
     // in somebody's HTTP logs for nothing.
     check('and the CDN is asked for the plain URL, describing nobody',
-      seen[0] && seen[0].url === CDN, seen[0] && seen[0].url);
+      seen.some(c => c.url === CDN), JSON.stringify(seen.map(c => c.url)));
 
     seen.length = 0;
     await send('sw:submit-report', { platform: 'threads', profileId: '5100000009',
@@ -1385,6 +1394,44 @@ async function reset(settings) {
     check('a report goes to the API, not to the file the list is served from',
       !!wrote && wrote.url === FS + '/reports',
       wrote ? wrote.url.slice(0, 100) : JSON.stringify(seen));
+  }
+
+  // The pin door. With NO host permission at all, a report must still reach a
+  // pointer-pinned host over plain CORS -- this is what lets 1.0.4 rescue an
+  // install whose primary domain an ISP has blocked, without the manifest
+  // change that would disable the extension pending re-approval. And a custom
+  // apiBase that is neither permitted nor pinned must stay refused, exactly
+  // as it always was.
+  {
+    const RELAY_BASE = 'https://h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com/v1';
+    const seen = [];
+    global.fetch = async (url, opts) => {
+      seen.push({ url: String(url), method: (opts || {}).method || 'GET' });
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => '{"ok":true,"status":"pending"}',
+               json: async () => ({ ok: true, status: 'pending' }) };
+    };
+    const hadPermission = chrome.permissions.contains;
+    chrome.permissions.contains = async () => false;
+
+    await reset({ platformBlockEnabled: true });
+    await setSettings({ apiBase: RELAY_BASE });
+    const r1 = await send('sw:submit-report', { platform: 'threads', profileId: '5100000010',
+      username: 'some.clone', reason: 'clone', viewerId: '778899' });
+    const posted = seen.find(c => c.method === 'POST');
+    check('a pinned host takes reports with no host permission at all',
+      !!posted && posted.url === RELAY_BASE + '/reports' && !(r1 && r1.needsPermission),
+      JSON.stringify({ posted: posted && posted.url, r: r1 }));
+
+    seen.length = 0;
+    await setSettings({ apiBase: 'https://somebody-elses.example/v1' });
+    const r2 = await send('sw:submit-report', { platform: 'threads', profileId: '5100000011',
+      username: 'other.clone', reason: 'clone', viewerId: '778899' });
+    check('an unpinned custom apiBase without permission is still refused',
+      !!r2 && r2.needsPermission === true && !seen.some(c => c.method === 'POST'),
+      JSON.stringify({ r: r2, posts: seen.filter(c => c.method === 'POST').length }));
+
+    chrome.permissions.contains = hadPermission;
   }
 
   // These drive the real refresh/submit/status handlers with fetch stubbed.
@@ -1435,6 +1482,8 @@ async function reset(settings) {
     await reset({ maxColdBlocksPerHour: 50, platformBlockEnabled: true });
     await setSettings({ listUrl: FS_URL });
     const r = await send('sw:refresh-now');
+    // Drain the unawaited pointer walk before reading the request log.
+    await new Promise(res => setTimeout(res, 25));
     check('the published list decodes',
       r.ok && r.blocklist && r.blocklist.ids.length === 3 &&
       r.blocklist.usernames.includes('threads'),
@@ -1470,8 +1519,16 @@ async function reset(settings) {
     // per install per poll, and it would put the reader's timezone in
     // somebody's HTTP logs for nothing. PRIVACY.md promises the poll says
     // nothing about you, and this is the assertion behind that sentence.
-    check('the list URL describes nobody',
-      calls.length === 1 && calls[0].url === FS_URL, calls[0] && calls[0].url);
+    // The pointer walk that rides the refresh is held to the same standard:
+    // its urls are compiled constants, so anything else in the log is a leak.
+    {
+      const pointerUrls = globalThis.CB_POINTER_URLS || [];
+      const listCalls = calls.filter(c => c.url === FS_URL);
+      check('the list URL describes nobody',
+        listCalls.length === 1 &&
+        calls.every(c => c.url === FS_URL || pointerUrls.includes(c.url)),
+        JSON.stringify(calls.map(c => c.url)));
+    }
 
     // The exact bug this was: names were read out of the array the worker
     // rebuilds for the QUEUE, which is only populated when list blocking is
