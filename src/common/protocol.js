@@ -64,6 +64,10 @@
       // Clone reporting. Users submit; an admin reviews and decides.
       SUBMIT_REPORT: 'sw:submit-report',
       REPORT_STATUS: 'sw:report-status',
+      // The pseudonym this install files under for a given signed-in account --
+      // the same acct_ id the moderation dashboard shows. Read by the popup so
+      // a reporter can see, and match, which identity their reports carry.
+      GET_REPORTER_ID: 'sw:get-reporter-id',
       BLOCKLIST_UPDATED: 'sw:blocklist-updated', // SW -> tabs broadcast
       // SW -> tabs: somebody pressed a button and is watching. The worker
       // loops sleep between claims on timers chosen for unattended

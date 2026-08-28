@@ -799,6 +799,18 @@
     "message": "Báo cáo là tài khoản giả mạo",
     "description": "The popup's main button: files a report about the profile the tab is showing."
   },
+  "popup_reporterId": {
+    "message": "Mã người báo cáo: $1",
+    "description": "Shown at the bottom of the popup: the pseudonym this install files reports under, the same id the moderation dashboard shows. $1 is the id."
+  },
+  "popup_reporterIdHint": {
+    "message": "Tài khoản mà báo cáo của bạn được gửi dưới danh nghĩa, và là mã hiển thị trong bảng quản trị. Nhấn để sao chép.",
+    "description": "Tooltip on the reporter id line in the popup."
+  },
+  "popup_reporterIdCopied": {
+    "message": "Đã sao chép",
+    "description": "Brief confirmation shown in place of the reporter id after it is clicked and copied. Keep it to one short word."
+  },
   "popup_settingsLink": {
     "message": "Cài đặt",
     "description": "Footer link in the popup: opens the extension's settings page."

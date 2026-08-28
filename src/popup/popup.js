@@ -202,6 +202,30 @@
     // about the page in front of you; everything below is about whether
     // blocking is running at all, which the active tab does not determine.
     await renderBlocking(state, settings, stats, status, !!tab);
+    await renderReporterId(status);
+  }
+
+  /**
+   * The pseudonym this install files under for the account on this tab -- the
+   * same acct_ id the moderation dashboard shows.
+   *
+   * Shown only when there is an account to derive it from: it depends on which
+   * account is signed in, so a tab that is not a signed-in Facebook or Threads
+   * page has no id to show. Clicking it copies it, which is what somebody
+   * matching a report to the dashboard actually wants to do with it.
+   */
+  async function renderReporterId(status) {
+    const el = $('reporterId');
+    if (!el) return;
+    const platform = status && status.platform;
+    const viewerId = status && status.viewerId;
+    if (!platform || !viewerId) { show('reporterId', false); return; }
+    const res = await sw(P.SW.GET_REPORTER_ID, { platform, viewerId });
+    const id = res && res.reporterId;
+    if (!id) { show('reporterId', false); return; }
+    el.dataset.id = id;
+    el.textContent = T('popup_reporterId', id);
+    show('reporterId', true);
   }
 
   /** The action card: who this is, and the one or two things to do about it. */
@@ -496,6 +520,20 @@
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('src/activity/activity.html') });
     window.close();
+  });
+
+  // Click the reporter id to copy it -- the point of showing it is to paste it
+  // into the dashboard's search. Confirmed briefly in place, then restored.
+  $('reporterId').addEventListener('click', async () => {
+    const el = $('reporterId');
+    const id = el.dataset.id;
+    if (!id) return;
+    try {
+      await navigator.clipboard.writeText(id);
+      const prev = el.textContent;
+      el.textContent = T('popup_reporterIdCopied');
+      setTimeout(() => { if (el.dataset.id === id) el.textContent = prev; }, 1200);
+    } catch (e) { /* clipboard blocked; the id is still on screen to read */ }
   });
 
   // The first draw waits for the language.

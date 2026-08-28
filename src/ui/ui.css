@@ -179,6 +179,18 @@ h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing
 .warn { color: var(--warn); }
 .hidden { display: none; }
 
+/* The reporter id line under the popup footer: the pseudonym this install files
+   under, shown so a reporter can match it to the moderation dashboard. Small,
+   monospace, full-width, and a button because clicking it copies. */
+.reporter-id {
+  display: block; width: 100%; margin-top: 8px;
+  background: none; border: 0; padding: 4px 0 0; text-align: left;
+  color: var(--muted); font-size: 11px; cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all; line-height: 1.4;
+}
+.reporter-id:hover { color: var(--accent); }
+
 /* popup: the action card names the profile the page is showing, so it has to
    read as a heading rather than as another status row. */
 .who {

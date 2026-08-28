@@ -2263,6 +2263,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         respond(await reportStatus(payload, payload && payload.force));
         break;
 
+      case P.SW.GET_REPORTER_ID:
+        respond(await getReporterId(payload));
+        break;
+
       case P.SW.LOG:
         if (payload && payload.msg) console.debug('[CloneBlocker/sw]', payload.msg);
         respond({ ok: true });
@@ -2491,6 +2495,23 @@ function reporterRef(platform, viewerId) {
   if (!platform || !viewerId) return null;
   if (!ID_RE.test(String(viewerId))) return null;
   return platform + ':' + viewerId;
+}
+
+/**
+ * The pseudonym this install files under for a signed-in account -- the same
+ * acct_ id the moderation dashboard shows.
+ *
+ * Computed, never stored: an HMAC of `platform:viewerId` under this install's
+ * secret, exactly the way submitReport() derives it, so what the popup shows a
+ * reporter is what their reports actually carry. Null when the account is
+ * unknown (signed out, or the page has not surfaced a viewer id yet) -- the
+ * popup says so rather than inventing an identity.
+ */
+async function getReporterId(payload) {
+  const reporter = reporterRef(payload && payload.platform, payload && payload.viewerId);
+  if (!reporter) return { ok: true, reporterId: null, signedOut: true };
+  return { ok: true, platform: payload.platform,
+           reporterId: await reporterPseudonym(reporter) };
 }
 
 
