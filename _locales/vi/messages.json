@@ -532,12 +532,12 @@
     "description": "Part of the 'On the list' value when the list holds exactly one numeric profile id."
   },
   "options_ownTab": {
-    "message": "Tự mở một thẻ riêng để xử lý hàng đợi <b>(thử nghiệm)</b>",
-    "description": "Tick box: let the extension open a background Facebook or Threads tab when it has approved accounts to block and no such tab is open. The part inside <b>…</b> is shown in bold; <b> and </b> are not translated."
+    "message": "Tự mở một thẻ riêng để xử lý hàng đợi",
+    "description": "Tick box: let the extension open a background Facebook or Threads tab when it has approved accounts to block and no such tab is open."
   },
   "options_ownTabHint": {
-    "message": "Việc chặn hoạt động bằng cách điều khiển chính mã của Facebook và Threads, mà mã đó chỉ tồn tại bên trong một thẻ đang mở — nên khi không có thẻ nào mở, các tài khoản đã duyệt chỉ nằm chờ. Bật tuỳ chọn này thì tiện ích giữ sẵn một thẻ được ghim cho việc đó: nó mở ra khi có việc và không ai đang duyệt web, rồi nằm yên ở đó chứ không hiện lên rồi biến mất mỗi lần hàng đợi có việc. Bạn cứ đóng nó bất cứ lúc nào: một phút sau nó quay lại, mỗi lần bạn đóng tiếp thì nó chờ lâu hơn, và sau lần thứ năm thì nó tự tắt tuỳ chọn này, để cài đặt khớp với điều bạn vừa làm. Mặc định bật khi tiện ích được nạp dạng giải nén để phát triển, và tắt trong bản đã phát hành.",
-    "description": "Explains the experimental self-opening tab, why it exists, and that it is on by default only in development builds."
+    "message": "Việc chặn hoạt động bằng cách điều khiển chính mã của Facebook và Threads, mà mã đó chỉ tồn tại bên trong một thẻ đang mở — nên khi không có thẻ nào mở, các tài khoản đã duyệt chỉ nằm chờ. Bật tuỳ chọn này thì tiện ích giữ sẵn một thẻ được ghim cho việc đó: nó mở ra khi có việc và không ai đang duyệt web, rồi nằm yên ở đó chứ không hiện lên rồi biến mất mỗi lần hàng đợi có việc. Bạn cứ đóng nó bất cứ lúc nào: một phút sau nó quay lại, mỗi lần bạn đóng tiếp thì nó chờ lâu hơn, và sau lần thứ năm thì nó tự tắt tuỳ chọn này, để cài đặt khớp với điều bạn vừa làm. Mặc định được bật; hãy tắt ở đây nếu bạn không muốn tiện ích tự mở thẻ riêng.",
+    "description": "Explains the self-opening tab, why it exists, and that it is on by default."
   },
   "options_rawFallback": {
     "message": "Cho phép dùng yêu cầu thô để dự phòng <b>(rủi ro)</b>",

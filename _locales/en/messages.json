@@ -532,12 +532,12 @@
     "description": "Part of the 'On the list' value when the list holds exactly one numeric profile id."
   },
   "options_ownTab": {
-    "message": "Open a tab of its own to get through the queue <b>(experimental)</b>",
-    "description": "Tick box: let the extension open a background Facebook or Threads tab when it has approved accounts to block and no such tab is open. The part inside <b>…</b> is shown in bold; <b> and </b> are not translated."
+    "message": "Open a tab of its own to get through the queue",
+    "description": "Tick box: let the extension open a background Facebook or Threads tab when it has approved accounts to block and no such tab is open."
   },
   "options_ownTabHint": {
-    "message": "Blocking works by driving Facebook's and Threads' own code, and that code only exists inside an open tab — so with no tab open, approved accounts simply wait. With this on, the extension keeps one pinned tab for the job: it opens when there is work and nobody is browsing, and then stays put rather than appearing and vanishing every time the queue fills. Close it whenever you like: it comes back a minute later, waits longer each time you close it again, and after the fifth it switches this option off, so the setting matches what you did. It ships on while the extension is loaded unpacked for development, and off in the published version.",
-    "description": "Explains the experimental self-opening tab, why it exists, and that it is on by default only in development builds."
+    "message": "Blocking works by driving Facebook's and Threads' own code, and that code only exists inside an open tab — so with no tab open, approved accounts simply wait. With this on, the extension keeps one pinned tab for the job: it opens when there is work and nobody is browsing, and then stays put rather than appearing and vanishing every time the queue fills. Close it whenever you like: it comes back a minute later, waits longer each time you close it again, and after the fifth it switches this option off, so the setting matches what you did. It is on by default; turn it off here if you would rather the extension never opened a tab of its own.",
+    "description": "Explains the self-opening tab, why it exists, and that it is on by default."
   },
   "options_rawFallback": {
     "message": "Allow raw request fallback <b>(risky)</b>",
