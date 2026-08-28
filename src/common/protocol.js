@@ -403,12 +403,14 @@
      * appearing and vanishing in the strip several times an hour. Pinned and
      * still is the shape somebody can live with.
      *
-     * Absent from stored settings means "follow the build" -- see
-     * getSettings(): on in an unpacked development build, off in a published
-     * one. Ticking or unticking the box in options makes the choice explicit
-     * and the build stops deciding.
+     * ON by default. It used to follow the build -- on when unpacked, off in a
+     * published one -- but a queued block that only runs while a tab happens to
+     * be open is a block most people never see happen, so the owner made the
+     * kept tab the default for everyone. Unticking the box in options is still
+     * respected; a one-time migration forces it on once for existing installs
+     * (service-worker.js CONFIG_REV 4), including any that had turned it off.
      */
-    experimentalOwnTab: false,
+    experimentalOwnTab: true,
     maxBlocksPerHour: 100,
     maxBlocksPerDay: 1000,
     // Cold targets -- ones the server nominated that this browser has never

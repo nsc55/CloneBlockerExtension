@@ -1004,35 +1004,34 @@ async function reset(settings) {
       JSON.stringify(store.local.ownWorkTab.threads.lastClaimAt));
   }
 
-  // -- 2g. which build turns the experiment on -------------------------------
+  // -- 2g. the own-work tab is on by default, and a choice still beats it ----
   //
-  // Enabled by default while developing, off in anything that came from the
-  // store, and an explicit choice beats both. Chrome puts update_url in the
-  // manifest of a store install and leaves it out of an unpacked one, which is
-  // the only signal available without asking for the management permission.
+  // It used to follow the build -- on when unpacked, off from the store. It is
+  // on for everyone now (experimentalOwnTab defaults true); the build no longer
+  // decides, and an explicit tick or untick still wins over the default.
   {
     manifest = { version: '1.0.1' };                     // unpacked
     await reset();
     delete store.sync.settings.experimentalOwnTab;
-    const dev = await send('sw:get-settings');
-    check('an unpacked build has the experiment on by default',
-      dev.settings.experimentalOwnTab === true, JSON.stringify(dev.settings.experimentalOwnTab));
+    const unset = await send('sw:get-settings');
+    check('with no choice made, the own-work tab is on by default',
+      unset.settings.experimentalOwnTab === true, JSON.stringify(unset.settings.experimentalOwnTab));
 
     manifest = { version: '1.0.1', update_url: 'https://clients2.google.com/service/update2/crx' };
+    delete store.sync.settings.experimentalOwnTab;
     const store_ = await send('sw:get-settings');
-    check('a store build has it off by default',
-      store_.settings.experimentalOwnTab === false, JSON.stringify(store_.settings.experimentalOwnTab));
+    check('a store build defaults it on too, not off',
+      store_.settings.experimentalOwnTab === true, JSON.stringify(store_.settings.experimentalOwnTab));
 
-    await setSettings({ experimentalOwnTab: true });
-    const chosen = await send('sw:get-settings');
-    check('and a choice that was actually made outranks the build',
-      chosen.settings.experimentalOwnTab === true, JSON.stringify(chosen.settings.experimentalOwnTab));
-
-    manifest = { version: '1.0.1' };
     await setSettings({ experimentalOwnTab: false });
     const off = await send('sw:get-settings');
-    check('in both directions',
+    check('an explicit untick still wins over the default',
       off.settings.experimentalOwnTab === false, JSON.stringify(off.settings.experimentalOwnTab));
+
+    await setSettings({ experimentalOwnTab: true });
+    const on = await send('sw:get-settings');
+    check('and ticking it again wins the other way',
+      on.settings.experimentalOwnTab === true, JSON.stringify(on.settings.experimentalOwnTab));
   }
 
   // -- 3. failed real attempts count toward the hourly cap ------------------
@@ -1487,12 +1486,12 @@ async function reset(settings) {
     chrome.permissions.contains = hadPermission;
   }
 
-  // Forced config migration, rev 3: a clean slate. Every install below the rev
-  // has its synced settings returned to the shipped defaults and its local
-  // storage wiped -- except the keys whose loss would cost the person
-  // something (reporting identity, unsent reports, who is already blocked,
-  // the worker's own tab, the tour flag) -- and the rev is stamped so it
-  // happens exactly once per device.
+  // Forced config migration. rev 3 is a clean slate -- synced settings back to
+  // the shipped defaults, local storage wiped except the keys whose loss would
+  // cost the person something (reporting identity, unsent reports, who is
+  // already blocked, the worker's own tab, the tour flag). rev 4 then forces the
+  // own-work tab ON for everyone, WITHOUT re-wiping a device already past rev 3.
+  // Each is stamped so it runs exactly once per device.
   {
     const migrate = globalThis.CB_MIGRATE_CONFIG;
     const D = globalThis.CB_DEFAULT_SETTINGS;
@@ -1517,8 +1516,10 @@ async function reset(settings) {
       listUrl: 'https://cloneblocker.tree55.com/blocklist.json',
       apiBase: 'https://my.own.server/v1', maxBlocksPerHour: 15, platformBlockEnabled: false } };
     await migrate();
-    check('migration returns synced settings to the shipped defaults wholesale',
-      JSON.stringify(store.sync.settings) === '{}', JSON.stringify(store.sync.settings));
+    check('migration wipes synced settings to defaults, then forces the own-tab on',
+      store.sync.settings.experimentalOwnTab === true &&
+      Object.keys(store.sync.settings).length === 1,
+      JSON.stringify(store.sync.settings));
     const kept = Object.keys(store.local).sort().join(',');
     check('migration wipes local storage except identity, outbox, done list, own tab and tour flag',
       kept === 'configRev,ownWorkTab,platformDone,reportOutbox,reporterSecret,welcomedAt', kept);
@@ -1528,14 +1529,16 @@ async function reset(settings) {
       store.local.welcomedAt === 123,
       JSON.stringify({ outbox: store.local.reportOutbox, done: store.local.platformDone }));
     check('migration stamps the rev so it does not run twice',
-      store.local.configRev === 3, String(store.local.configRev));
+      store.local.configRev === 4, String(store.local.configRev));
     const s = await send('sw:get-settings');
-    check('settings read after the wipe are the shipped defaults',
+    check('settings read after the wipe are the shipped defaults, own-tab on',
       s.ok && s.settings.listUrl === D.listUrl && s.settings.apiBase === D.apiBase &&
       s.settings.maxBlocksPerHour === D.maxBlocksPerHour &&
-      s.settings.platformBlockEnabled === D.platformBlockEnabled,
+      s.settings.platformBlockEnabled === D.platformBlockEnabled &&
+      s.settings.experimentalOwnTab === true,
       JSON.stringify({ listUrl: s.settings.listUrl, apiBase: s.settings.apiBase,
-                       hour: s.settings.maxBlocksPerHour, on: s.settings.platformBlockEnabled }));
+                       hour: s.settings.maxBlocksPerHour, on: s.settings.platformBlockEnabled,
+                       ownTab: s.settings.experimentalOwnTab }));
 
     // (b) a second run at the current rev changes nothing, settings or data.
     store.sync.settings = { apiBase: 'https://someone.example/v1' };
@@ -1546,14 +1549,31 @@ async function reset(settings) {
       store.local.blocklist.ids[0] === '5',
       JSON.stringify({ apiBase: store.sync.settings.apiBase, list: store.local.blocklist }));
 
-    // (c) a fresh install has nothing to wipe and is simply stamped, with
-    // nothing frozen into sync.
+    // (c) a fresh install has nothing to wipe and is simply stamped, with only
+    // the forced own-tab in sync.
     store.local = {}; store.sync = {};
     await migrate();
-    check('a fresh install is stamped and left with nothing frozen',
-      store.local.configRev === 3 && Object.keys(store.local).length === 1 &&
-      JSON.stringify(store.sync.settings) === '{}',
+    check('a fresh install is stamped, with only the forced own-tab in sync',
+      store.local.configRev === 4 && Object.keys(store.local).length === 1 &&
+      store.sync.settings.experimentalOwnTab === true &&
+      Object.keys(store.sync.settings).length === 1,
       JSON.stringify({ local: store.local, sync: store.sync }));
+
+    // (d) an install ALREADY at rev 3 -- past the clean slate -- is not wiped
+    // again: everything it holds survives, and only the own-work tab is forced
+    // on (even over an explicit off) on the way to rev 4.
+    store.local = { configRev: 3, blocklist: { ids: ['9'], usernames: [] },
+                    reporterSecret: SECRET, aliasMap: { a: 1 } };
+    store.sync = { settings: { maxBlocksPerHour: 77, experimentalOwnTab: false } };
+    await migrate();
+    check('a rev-3 install is not wiped again -- its state survives',
+      store.local.blocklist && store.local.blocklist.ids[0] === '9' &&
+      !!store.local.aliasMap && store.sync.settings.maxBlocksPerHour === 77,
+      JSON.stringify({ local: Object.keys(store.local).sort(),
+                       hour: store.sync.settings.maxBlocksPerHour }));
+    check('and its explicit own-tab off is forced back on, stamped rev 4',
+      store.sync.settings.experimentalOwnTab === true && store.local.configRev === 4,
+      JSON.stringify({ ownTab: store.sync.settings.experimentalOwnTab, rev: store.local.configRev }));
   }
 
   // A private list credential must reach ONLY the self-hosted primary, never a

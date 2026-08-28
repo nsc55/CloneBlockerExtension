@@ -94,20 +94,45 @@ const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
 // doc_ids, identity caches, stats, leases, cooldowns, alerts -- is rebuilt
 // from the list and the page within minutes. The earlier revs are subsumed (a
 // wipe walks every setting forward) and are no longer carried.
-const CONFIG_REV = 3;
+//
+// rev 4 (1.0.7): force the own-work tab (experimentalOwnTab) ON, once, for every
+// existing install -- overriding even an explicit off, because the owner has
+// made it the default. This is NOT a wipe: a device already past the rev-3 clean
+// slate keeps everything and only has this one flag set, so the step runs
+// whether or not the wipe above did. Which is why the wipe is now gated to
+// rev < 3 rather than to the whole migration: re-wiping a rev-3 install on the
+// way to rev 4 would throw away state it was right to keep.
+const CONFIG_REV = 4;
 const WIPE_KEEP = ['reporterSecret', 'reportOutbox', 'platformDone', 'ownWorkTab', 'welcomedAt'];
 
 async function migrateConfig() {
   const rev = (await getLocal('configRev', 0)) | 0;
   if (rev >= CONFIG_REV) return;
-  // Settings first. An empty object is every default, resolved at read time
-  // by getSettings, so none of this build's numbers is written down here.
-  await chrome.storage.sync.set({ [KEYS.SETTINGS]: {} });
-  const all = await chrome.storage.local.get(null);
-  const drop = Object.keys(all || {}).filter(k => !WIPE_KEEP.includes(k));
-  if (drop.length) await chrome.storage.local.remove(drop);
-  // Stamped last: a worker that dies between the two writes above simply
-  // runs this again, and every step is safe to repeat.
+
+  // rev 3: the clean slate. Only for an install that has never had it -- a
+  // rev-3 device must not be wiped again by a later rev. Settings to an empty
+  // object is every default, resolved at read time by getSettings, so none of
+  // this build's numbers is written down here.
+  if (rev < 3) {
+    await chrome.storage.sync.set({ [KEYS.SETTINGS]: {} });
+    const all = await chrome.storage.local.get(null);
+    const drop = Object.keys(all || {}).filter(k => !WIPE_KEEP.includes(k));
+    if (drop.length) await chrome.storage.local.remove(drop);
+  }
+
+  // rev 4: the own-work tab is forced on. Read-modify-write so it lands on top
+  // of whatever the wipe left (an empty object) or whatever a rev-3 install
+  // already had, and only written when it is not already true.
+  const got = await chrome.storage.sync.get(KEYS.SETTINGS);
+  const stored = got[KEYS.SETTINGS] || {};
+  if (stored.experimentalOwnTab !== true) {
+    await chrome.storage.sync.set({
+      [KEYS.SETTINGS]: Object.assign({}, stored, { experimentalOwnTab: true })
+    });
+  }
+
+  // Stamped last: a worker that dies between the writes above simply runs this
+  // again, and every step is safe to repeat.
   await setLocal('configRev', CONFIG_REV);
 }
 
@@ -137,13 +162,10 @@ async function getSettings() {
   merged.blockSeen = modes.seen;
   merged.blockFromList = modes.fromList;
   merged.mode = modes.fromList ? 'active' : 'passive';
-  // Experiments follow the BUILD until somebody actually chooses. Absent from
-  // stored settings means "whatever this build should do" -- on when it was
-  // loaded unpacked, off when it came from the store -- and the moment the
-  // box in options is ticked or unticked the key exists and the build stops
-  // having an opinion. Same reasoning as the modes above: it has to be read
-  // off `stored`, because `merged` always has a value.
-  if (!('experimentalOwnTab' in stored)) merged.experimentalOwnTab = isDevBuild();
+  // experimentalOwnTab is on by default now (DEFAULTS carries true), no longer
+  // build-dependent -- so nothing special is needed here: an install that never
+  // chose gets the default true through the merge above, and an explicit tick or
+  // untick in `stored` wins as it does for any other setting.
   return merged;
 }
 async function setSettings(patch) {
