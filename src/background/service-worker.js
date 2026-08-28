@@ -2673,11 +2673,23 @@ async function rememberDocIds(payload) {
  * instead of the report simply ceasing to exist.
  */
 const OUTBOX = 'reportOutbox';
-const OUTBOX_MAX = 200;
-const OUTBOX_LADDER_MS = [60000, 300000, 1800000, 3 * 3600000, 12 * 3600000];
-// Six attempts spread across the ladder is a day and a half. Past that it is
-// not a transient failure any more.
-const OUTBOX_MAX_TRIES = 6;
+// Room for a whole reporting session to wait out an outage. Someone working
+// through a wave of clones can queue hundreds while the origin is rate limited
+// or an ISP is blocking it, and the point of the outbox is that none of them is
+// lost -- so the cap that protects against unbounded growth is set well above
+// any real session rather than at a number a busy afternoon reaches. Oldest out
+// first if it is ever exceeded.
+const OUTBOX_MAX = 1000;
+// A faster first look, then the long tail: a transient 429 usually clears in
+// minutes, an ISP block in days. The flush rides the refresh alarm, so the
+// sub-alarm early steps are effectively "next refresh".
+const OUTBOX_LADDER_MS = [30000, 60000, 120000, 300000, 900000,
+                          3600000, 6 * 3600000, 12 * 3600000];
+// Fifteen attempts across that ladder is the better part of a week. A report
+// worth filing is worth keeping through an outage that long; past it, the
+// failure is not transient and the give-up is SAID OUT LOUD (badge + alert)
+// rather than the report quietly ceasing to exist.
+const OUTBOX_MAX_TRIES = 15;
 
 async function outboxAdd(payload, why) {
   const box = await getLocal(OUTBOX, []);
