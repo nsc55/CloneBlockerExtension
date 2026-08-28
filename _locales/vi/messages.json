@@ -867,6 +867,14 @@
     "message": "Đã báo cáo trước đó",
     "description": "The confirmation headline in the report sheet when the report just sent was a repeat from this browser. It replaces \"Report sent\", which would not be true."
   },
+  "report_quickBlockOption": {
+    "message": "Lần sau chặn chỉ với một cú nhấp (bỏ qua hộp thoại này)",
+    "description": "A checkbox in the report/block dialog that turns on quick mode: the next block acts immediately instead of opening this dialog."
+  },
+  "report_quickBlockOptionNote": {
+    "message": "Từ giờ nút chặn sẽ hoạt động ngay khi bạn nhấn, với hiệu ứng ngắn thay vì hộp thoại này. Bạn có thể tắt trong Cài đặt.",
+    "description": "The note shown under the quick-block checkbox once it is ticked."
+  },
   "report_alsoBlock": {
     "message": "Chặn luôn tài khoản này",
     "description": "Tick box in the report sheet, on by default: block the reported account immediately as well as reporting it."

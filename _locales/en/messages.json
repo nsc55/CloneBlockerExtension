@@ -867,6 +867,14 @@
     "message": "Already reported",
     "description": "The confirmation headline in the report sheet when the report just sent was a repeat from this browser. It replaces \"Report sent\", which would not be true."
   },
+  "report_quickBlockOption": {
+    "message": "Block in one click next time (skip this dialog)",
+    "description": "A checkbox in the report/block dialog that turns on quick mode: the next block acts immediately instead of opening this dialog."
+  },
+  "report_quickBlockOptionNote": {
+    "message": "From now on the block button acts the moment you press it, with a short animation instead of this dialog. You can turn it off in Settings.",
+    "description": "The note shown under the quick-block checkbox once it is ticked."
+  },
   "report_alsoBlock": {
     "message": "Block this profile too",
     "description": "Tick box in the report sheet, on by default: block the reported account immediately as well as reporting it."

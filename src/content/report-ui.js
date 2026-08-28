@@ -619,6 +619,15 @@
           <span data-i18n="report_alsoBlock"></span>
         </label>
         <div class="blocknote note" hidden></div>
+        <!-- Turn on one-click blocking from here, without a trip to Settings:
+             ticking it means the next block skips this dialog and acts at once,
+             with an inline animation. It is remembered, and the note appears
+             only when it is on so the modal stays quiet by default. -->
+        <label class="alsoblock">
+          <input type="checkbox" id="quickBlock">
+          <span data-i18n="report_quickBlockOption"></span>
+        </label>
+        <div class="quicknote note" hidden></div>
         <!-- What sending this actually leads to, said BEFORE the button
              rather than only on the confirmation afterwards. It was only in
              the success state, which meant the one fact that might persuade
@@ -755,6 +764,27 @@
       bridge.sw(P.SW.SET_SETTINGS, { reportAlsoBlocks: box.checked });
       settings.reportAlsoBlocks = box.checked;
     });
+
+    // One-click blocking, offered right here. Ticking it does not change what
+    // this sheet does now -- the reader is already in it and will press a
+    // button -- it decides that the NEXT block skips the sheet. Remembered the
+    // moment it changes, so it is on the same footing as the box above and as
+    // the Settings toggle it mirrors.
+    const quickBox = $('#quickBlock');
+    const quickNote = $('.quicknote');
+    if (quickBox && quickNote) {
+      const syncQuickNote = () => {
+        quickNote.hidden = !quickBox.checked;
+        if (quickBox.checked) quickNote.textContent = T('report_quickBlockOptionNote');
+      };
+      quickBox.checked = settings.quickBlock === true;
+      syncQuickNote();
+      quickBox.addEventListener('change', () => {
+        bridge.sw(P.SW.SET_SETTINGS, { quickBlock: quickBox.checked });
+        settings.quickBlock = quickBox.checked;
+        syncQuickNote();
+      });
+    }
 
     $('.cancel').addEventListener('click', closeModal);
     $('.submit').addEventListener('click', () => {
