@@ -29,13 +29,18 @@ const ROOT = path.join(__dirname, '..');
 const SESSION_DIR = path.join(os.tmpdir(), 'claude', 'C--src-3queblocker', 'dev-session');
 const PROFILE = path.join(SESSION_DIR, 'chrome-profile');
 
-// The hands-on session runs against PRODUCTION Firebase -- there is nothing
-// local left to run. The automated tests still use the emulator, because a
-// test must never write junk into the real project; this session only READS
-// the published list (and files reports if you use the sheet), which is
-// exactly what a real install does.
-const PROJECT = 'cloneblocker';
-const LIST_URL = 'https://cloneblocker.tree55.com/blocklist.json';
+// The hands-on session runs against PRODUCTION: the shipped default, which is
+// the chunked list under the GitHub mirror with the other mirrors, the relay
+// and the origin behind it -- there is nothing local left to run. The
+// automated tests serve trees of their own, because a test must never read
+// or write anything real; this session only READS the published list (and
+// files reports if you use the sheet), which is exactly what a real install
+// does. So no listUrl is written: the session polls whatever address the
+// build ships with, and a change to that default is exercised here rather
+// than hidden behind a pin. protocol.js is loaded for the address, so the
+// pre-flight below asks the same root the worker will.
+require(path.join(ROOT, 'src', 'common', 'protocol.js'));
+const ROOT_URL = globalThis.CB_LIST_V3_BASE + 'manifest.json';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -90,13 +95,13 @@ async function evalIn(cdp, sessionId, expression) {
   if (FRESH) { try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch (e) {} }
   fs.mkdirSync(PROFILE, { recursive: true });
 
-  // Nothing to start: the list is the production document, published by the
-  // dashboard. Just confirm it answers before wiring the extension to it.
+  // Nothing to start: the list is the production tree, published by the
+  // backend and mirrored. Just confirm its root answers before launching.
   try {
-    const r = await fetch(LIST_URL);
-    if (!r.ok) console.warn('production list answered HTTP ' + r.status + ' -- continuing anyway');
+    const r = await fetch(ROOT_URL, { cache: 'no-cache' });
+    if (!r.ok) console.warn('production root answered HTTP ' + r.status + ' -- continuing anyway');
   } catch (e) {
-    console.warn('production list unreachable (' + e.message + ') -- continuing anyway');
+    console.warn('production root unreachable (' + e.message + ') -- continuing anyway');
   }
 
   // -- is a browser already listening on this port? ------------------------
@@ -143,7 +148,7 @@ async function evalIn(cdp, sessionId, expression) {
   }
 
   fs.writeFileSync(path.join(SESSION_DIR, 'session.json'),
-    JSON.stringify({ extId, cdpPort: CDP_PORT, listUrl: LIST_URL }, null, 2));
+    JSON.stringify({ extId, cdpPort: CDP_PORT, listRoot: ROOT_URL }, null, 2));
 
   // -- configure it through its own options page ---------------------------
   const optionsUrl = `chrome-extension://${extId}/src/options/options.html`;
@@ -152,31 +157,17 @@ async function evalIn(cdp, sessionId, expression) {
   await cdp.send('Runtime.enable', {}, sessionId);
   await sleep(1500);
 
-  // The blocklist host lives in optional_host_permissions, so it has to be
-  // granted before the service worker is allowed to fetch it. chrome.permissions
-  // .request needs a user gesture, which Runtime.evaluate can synthesise.
-  //
-  // The request can also simply never settle -- it is answered by a native
-  // Chrome bubble, and one already on screen from an earlier run leaves the
-  // promise pending forever. Awaiting it directly means a 20s CDP timeout takes
-  // down the whole launcher, abandoning a browser that is already up with an
-  // orphan options tab. So: ask what we hold first, and cap the request in the
-  // page rather than letting it decide whether the session gets configured.
+  // Nothing to grant. The manifest has no optional_host_permissions any more:
+  // the origin is a required host, and the shipped default -- the GitHub
+  // mirror -- is read the way every mirror is, over CORS with no credentials
+  // and no permission at all. This only reports what the build holds, so a
+  // session whose manifest has drifted says so on the console rather than
+  // failing a refresh with no explanation.
   const perm = await evalIn(cdp, sessionId, `
-    (async () => {
-      const origins = ['https://cloneblocker.tree55.com/*'];
-      if (await chrome.permissions.contains({ origins })) {
-        return JSON.stringify({ granted: true, has: true, asked: false });
-      }
-      let granted = false;
-      try {
-        granted = await Promise.race([
-          chrome.permissions.request({ origins }),
-          new Promise(r => setTimeout(() => r('pending'), 10000))
-        ]);
-      } catch (e) { granted = 'error: ' + e.message; }
-      return JSON.stringify({ granted, has: await chrome.permissions.contains({ origins }), asked: true });
-    })()
+    (async () => JSON.stringify({
+      origin: await chrome.permissions.contains({ origins: ['https://cloneblocker.tree55.com/*'] }),
+      mirrorNeedsNone: !(await chrome.permissions.contains({ origins: ['https://raw.githubusercontent.com/*'] }))
+    }))()
   `);
 
   const applied = await evalIn(cdp, sessionId, `
@@ -187,10 +178,11 @@ async function evalIn(cdp, sessionId, expression) {
       // wipe rather than being wiped by it -- with blocking silently back on.
       await new Promise(r => chrome.runtime.sendMessage({ type: 'sw:get-settings' }, r));
       await chrome.storage.sync.set({ settings: {
-        // refreshMinutes is deliberately not pinned here: this session should
-        // poll the way a real install does, and pinning it meant the shipped
-        // default could change without this ever noticing.
-        listUrl: '${LIST_URL}',
+        // Neither refreshMinutes nor listUrl is pinned here: this session
+        // should poll the way a real install does, and pinning either meant
+        // the shipped default could change without this ever noticing. The
+        // object is written whole, so a listUrl an earlier session wrote is
+        // gone with it.
         hideEnabled: true,
         hideMode: 'placeholder',
         hideComments: true,
@@ -210,10 +202,12 @@ async function evalIn(cdp, sessionId, expression) {
   console.log('  extension id : ' + extId);
   console.log('  cdp port     : ' + CDP_PORT);
   console.log('  profile      : ' + PROFILE);
-  console.log('  blocklist    : ' + LIST_URL);
+  console.log('  blocklist    : shipped default (' + ROOT_URL + ')');
   console.log('  host access  : ' + perm);
   console.log('  loaded       : ' + (parsed.ok
-    ? `${parsed.blocklist.ids.length} ids, ${parsed.blocklist.usernames.length} usernames`
+    ? `${parsed.blocklist.counts.ids} ids, ${parsed.blocklist.counts.usernames} usernames, ` +
+      `${parsed.blocklist.format}, ${parsed.blocklist.chunks ? parsed.blocklist.chunks.changed : '?'} chunks changed, ` +
+      `generation ${parsed.blocklist.generation}`
     : 'FAILED - ' + parsed.error));
   console.log('  layer 2      : DISABLED (dry run on) - nothing can be blocked for real');
   console.log('');

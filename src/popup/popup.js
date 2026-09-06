@@ -162,8 +162,10 @@
     const stats = (state && state.stats) || {};
     const bl = state && state.blocklist;
 
+    // `count` is every entry -- ids and usernames, manual ones included --
+    // tallied by the worker; the record no longer carries the entries.
     $('listLine').textContent = bl
-      ? T('popup_listLine', bl.ids.length + bl.usernames.length, ago(bl.fetchedAt))
+      ? T('popup_listLine', bl.count || 0, ago(bl.fetchedAt))
       : T('popup_listNotLoaded');
 
     const tab = await activeTab();
@@ -495,7 +497,10 @@
   async function blockLanded(platform, profileId, ms) {
     const deadline = Date.now() + (ms || 20000);
     while (Date.now() < deadline) {
-      const st = await sw(P.SW.GET_STATE).catch(() => null);
+      // lite: only the done list is wanted. Without it the worker joins names
+      // and tags for every queued and logged id from its store on each of
+      // these fifty polls, for a window that is about to close.
+      const st = await sw(P.SW.GET_STATE, { lite: true }).catch(() => null);
       const done = st && st.done && st.done[platform];
       if (Array.isArray(done) && done.includes(profileId)) return true;
       await new Promise(r => setTimeout(r, 400));

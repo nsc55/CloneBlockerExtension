@@ -315,6 +315,22 @@ const present = new Set(files);
     'the built-in list URL is https', listUrl || 'not found');
   report(!!listUrl && !/localhost|127\.0\.0\.1|demo-/.test(listUrl),
     'and points at production', listUrl || '');
+
+  // The chunked list the shipped default actually reads, resolved the same
+  // way: `const LIST_V3_BASE = <HOST> + '/blocklist/v3/'`. The harnesses point
+  // a copy of the build at a tree served from loopback, and a base left
+  // pointing there would ship a build that reads nothing -- so this is held
+  // to the same two rules as the whole-file address.
+  const v3Direct = /const LIST_V3_BASE\s*=\s*'([^']+)'/.exec(proto);
+  const v3Joined = /const LIST_V3_BASE\s*=\s*([A-Z_][A-Z0-9_]*)\s*\+\s*'([^']+)'/.exec(proto);
+  const v3Host = v3Joined && hostOf(v3Joined[1]);
+  const v3Base = v3Direct ? v3Direct[1]
+    : (v3Host ? v3Host + v3Joined[2] : null);
+
+  report(!!v3Base && /^https:\/\/.+\/blocklist\/v3\/$/.test(v3Base),
+    'the built-in chunked list base is https and base-shaped', v3Base || 'not found');
+  report(!!v3Base && !/localhost|127\.0\.0\.1|demo-/.test(v3Base),
+    'and points at production', v3Base || '');
 }
 
 if (failed) {

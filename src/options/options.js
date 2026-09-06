@@ -269,9 +269,11 @@
     }
     $('listSynced').textContent = ago(bl.fetchedAt);
     $('listSynced').title = bl.fetchedAt ? new Date(bl.fetchedAt).toLocaleString() : '';
+    // Tallies the worker keeps with the list; the record carries no entries.
+    const counts = bl.counts || {};
     $('listCounts').textContent =
-      counted(bl.ids.length, 'options_profileIdOne', 'options_profileIdMany') + ' · ' +
-      counted(bl.usernames.length, 'options_usernameOne', 'options_usernameMany');
+      counted(counts.ids || 0, 'options_profileIdOne', 'options_profileIdMany') + ' · ' +
+      counted(counts.usernames || 0, 'options_usernameOne', 'options_usernameMany');
   }
 
   $('refreshList').addEventListener('click', async () => {
@@ -364,12 +366,20 @@
     const view = {
       blockSeen: modes.seen,
       blockFromList: modes.fromList,
+      // Counts and provenance only, never the entries: the list lives in the
+      // worker's IndexedDB and can run to millions of rows. badObjects and
+      // staleMirrors, when a refresh hit them, are in the stats dump below.
       blocklist: bl ? {
-        ids: bl.ids.length,
-        usernames: bl.usernames.length,
+        format: bl.format,
+        ids: (bl.counts || {}).ids || 0,
+        usernames: (bl.counts || {}).usernames || 0,
+        byPlatform: (bl.counts || {}).byPlatform || null,
+        generation: bl.generation,
+        updatedAt: bl.updatedAt,
         fetchedAt: new Date(bl.fetchedAt).toLocaleString(),
-        etag: bl.etag,
-        source: bl.source
+        source: bl.source,
+        verified: bl.verified,
+        chunks: bl.chunks || null
       } : null,
       queue: Object.fromEntries(Object.entries(state.queue || {}).map(([k, v]) => [k, v.length])),
       blocked: Object.fromEntries(Object.entries(state.done || {}).map(([k, v]) => [k, v.length])),

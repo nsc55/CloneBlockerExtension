@@ -1,11 +1,11 @@
 # Privacy policy — Clone Blocker
 
-*Last updated: 27 August 2026*
+*Last updated: 6 September 2026*
 
 *Also served, with a Vietnamese translation, at
 <https://cloneblocker.tree55.com/privacy>. This file is the policy of record;
-`tools/check.js` holds the two "Last updated" dates equal, so change them
-together.*
+the backend repository's `tools/check.js` holds the two "Last updated" dates
+equal, so change them together.*
 
 Clone Blocker is a browser extension that blocks accounts impersonating you on
 Facebook and Threads, and can optionally hide their content as well. This
@@ -38,7 +38,10 @@ Held in Chrome's extension storage, and never transmitted:
 - **Your settings** — which of the two blocking switches you ticked, which
   kinds of account you allow blocks for, whether blocking is paused, whether
   you switched hiding on (it ships **off**), and every pacing and cap value.
-- **The cached blocklist** — so it does not have to be re-fetched on every page.
+- **The blocklist** — kept in the browser's own database (IndexedDB), so it
+  does not have to be re-fetched on every page and so a list of any size
+  fits. A tab holds only a small cache of the verdicts it asked for, and the
+  id-to-username cache below.
 - **The block queue** — which accounts are pending, which have been done, and
   the timestamps used to keep within your own hourly and daily caps.
 - **Captured request templates** — the shape of a block request the site
@@ -69,16 +72,23 @@ Uninstalling the extension removes all of it.
 
 Nothing about you, on purpose.
 
-The list is a static file on a CDN and is fetched with no query string: no
-timezone, no language, no identifier, no budget hint. Two installations in
-different countries send byte-identical requests. The ranking that decides
-which accounts to work through first is computed inside your browser, from
-metadata the file already carries — it never leaves the machine.
+The list is read as a small signed index plus only the pieces that changed
+since this installation last looked, from public copies, with no query string:
+no timezone, no language, no identifier, no budget hint. Two installations in
+different countries holding the same list send byte-identical requests.
+**Which** pieces are requested is decided by what changed on the server and
+what this installation already holds — never by which profiles you looked at.
+The extension never fetches a piece on demand for a lookup: a profile on your
+screen is checked against what is already on your device, and only there. The
+ranking that decides which accounts to work through first is computed inside
+your browser, from metadata the list already carries — it never leaves the
+machine.
 
 **Your IP address, and what is done with it.** Any web server sees the address
 a request came from; that is how a reply gets back to you. **Fetching the
-blocklist** still does nothing with yours beyond answering: the file is static,
-the request carries no identifier, and nothing about that fetch is written down.
+blocklist** still does nothing with yours beyond answering: the files are
+static, the requests carry no identifier, and nothing about those fetches is
+written down.
 
 **Filing a report is different, and this has changed.** When you submit a
 report, the address it came from is **stored on that report**, along with the
@@ -146,13 +156,15 @@ Because Vietnamese ISPs block that address, the paths the extension uses **by
 default** are the ones that survive the block, and each is approved by a signed
 pointer document whose permitted hostnames also ship inside the extension:
 
-- **Reading the list.** By default your blocklist is fetched from a public,
-  signed copy on `raw.githubusercontent.com`, with `cdn.jsdelivr.net` and the
-  origin as fallbacks. GitHub and jsDelivr see an ordinary anonymous file
-  request that carries nothing about you. Every copy is signed and verified
-  against a key built into the extension, so a mirror that is stale, tampered
-  with, or hostile can only fail to verify — it can never hand you a different
-  list.
+- **Reading the list.** By default your blocklist is read from a public,
+  signed copy on `raw.githubusercontent.com`, with `cdn.jsdelivr.net`, the
+  AWS relay described below and the origin as fallbacks. It is read as a
+  small signed index plus the pieces that changed, each piece named by its
+  own hash. GitHub, jsDelivr and the relay see ordinary anonymous file
+  requests that carry nothing about you. The index is signed and verified
+  against a key built into the extension, and every piece is checked against
+  that index, so a mirror that is stale, tampered with, or hostile can only
+  fail to verify — it can never hand you a different list.
 - **Filing a report.** By default your report goes to a relay we run on AWS in
   Singapore (`h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com`), which
   forwards it to the backend. The relay sees exactly what the backend would
@@ -166,12 +178,14 @@ pointer document whose permitted hostnames also ship inside the extension:
 
 ### Fetching the list
 
-A periodic HTTPS request for your blocklist. **It carries no personal data —
-no time zone, no language, nothing about you at all.** Earlier versions sent
-your time zone, language and remaining block budget with this request so the
-server could rank suggestions; that ranking now happens locally, so the fetch
-is anonymous by construction. This is an improvement worth stating plainly:
-nothing about you is sent to anyone when the list is fetched.
+A periodic check, every ten minutes, of a small signed index, followed by
+requests for whichever pieces of the list changed. **None of it carries
+personal data — no time zone, no language, nothing about you at all.** Earlier
+versions sent your time zone, language and remaining block budget with this
+request so the server could rank suggestions; that ranking now happens
+locally, so the fetch is anonymous by construction. This is an improvement
+worth stating plainly: nothing about you is sent to anyone when the list is
+fetched.
 
 ### Filing a report
 
@@ -238,8 +252,7 @@ then stays open rather than appearing and disappearing. You can close it
 whenever you like — it reopens a minute later, waits longer each time you close
 it again, and after the fifth it switches the option off for you. While it is open the site sees an ordinary page visit, the
 same as if you had opened it yourself, and it stays signed in as you are. It
-ships **off** in the published extension and is on only in unpacked
-development builds.
+is **on** by default; unticking the option in settings switches it off.
 
 Unless you pause blocking in settings, the extension issues blocks through
 Facebook's or Threads' own in-page mechanism, exactly as pressing their Block
@@ -375,10 +388,11 @@ everything it holds.
 
 | Permission | Why |
 |---|---|
-| `storage` | Keep your settings and the cached blocklist. |
+| `storage` | Keep your settings, the list's status and the ranked slice it works from; the list itself is in the browser's database, see `unlimitedStorage`. |
+| `unlimitedStorage` | Let the blocklist database grow past the browser's default quota. The list can run to millions of entries; nothing in it is sent anywhere. |
 | `alarms` | Refresh the blocklist on schedule. The extension's background worker is stopped between events, so a repeating alarm is what makes the periodic refresh fire. |
 | Access to facebook.com, threads.net, threads.com | The only two sites the extension works on: it reads the page to find listed accounts, and issues blocks unless you have paused that. |
-| Access to cloneblocker.tree55.com | The backend: the blocklist is read from it, and reports you file are written to it. |
+| Access to cloneblocker.tree55.com | The backend: a fallback source for the list, and where reports you file are written when the relay cannot be reached. |
 
 Every one of them is declared in the manifest and granted when you install. The
 extension asks for **no permissions at runtime** — there is no prompt to
