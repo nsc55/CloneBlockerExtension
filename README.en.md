@@ -38,7 +38,7 @@ no permission prompt to accept. It starts working the next time you open
 Facebook or Threads, in Vietnamese if that is what Chrome is running in and in
 English otherwise.
 
-Requires Chrome 120 or newer.
+Requires Chrome 137 or newer.
 
 <details>
 <summary>Installing from source instead</summary>

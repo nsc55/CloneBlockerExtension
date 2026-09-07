@@ -195,6 +195,17 @@ why it did not work, are in `docs/BACKEND-PLAN.md`.
 - Reports filed after a decision no longer change what is published about that
   account.
 
+### Chrome 137 is now the minimum
+
+- **The manifest said Chrome 120 and the extension never worked there.** Every
+  blocklist is signed, and the signature is checked with Ed25519 -- which
+  Chrome only gained in version 137. On anything older the check could not run,
+  so every list was refused and nothing was ever blocked automatically; the
+  only sign of it was "the blocklist could not be verified and was ignored",
+  which reads like tampering rather than an old browser. The stated
+  requirement now matches what the extension actually needs. Chrome 120-136
+  keeps the version it already has, which is no less capable than before.
+
 ---
 
 ## 1.0.1 — 22 August 2026

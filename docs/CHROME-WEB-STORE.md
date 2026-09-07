@@ -200,7 +200,7 @@ published. No analytics, no ads, no third parties.
 Full policy: https://github.com/nsc55/CloneBlockerExtension/blob/main/PRIVACY.md
 
 In English and Vietnamese, following your browser's language. Requires Chrome
-120+ and a Facebook or Threads account. Free and open source:
+137+ and a Facebook or Threads account. Free and open source:
 https://github.com/nsc55/CloneBlockerExtension
 
 Not affiliated with, endorsed by, or connected to Meta, Facebook or Threads.
@@ -245,7 +245,7 @@ rời trình duyệt. Không điều gì về bạn với tư cách người bá
 bố. Không thống kê, không quảng cáo, không bên thứ ba.
 Chính sách đầy đủ: https://github.com/nsc55/CloneBlockerExtension/blob/main/PRIVACY.md
 
-Tiếng Việt và tiếng Anh, theo ngôn ngữ trình duyệt của bạn. Cần Chrome 120 trở
+Tiếng Việt và tiếng Anh, theo ngôn ngữ trình duyệt của bạn. Cần Chrome 137 trở
 lên và một tài khoản Facebook hoặc Threads. Miễn phí, mã nguồn mở:
 https://github.com/nsc55/CloneBlockerExtension
 

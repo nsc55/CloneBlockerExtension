@@ -26,7 +26,7 @@ Tiện ích này sẽ tải danh sách clone từ nguồn dữ liệu được �
 **[Cài đặt từ Chrome Web Store](https://chromewebstore.google.com/detail/clone-blocker/mlkbihlabbmjdhmadjkijioafknfnmaj)** — miễn phí
 
 
-Cần Chrome 120 trở lên.
+Cần Chrome 137 trở lên.
 
 <details>
 <summary>Hoặc cài từ mã nguồn</summary>
