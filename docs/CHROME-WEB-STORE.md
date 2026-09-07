@@ -370,16 +370,33 @@ welcome page from reopening. Nothing in storage is transmitted anywhere by
 the extension, and uninstalling removes all of it.
 ```
 
-**`unlimitedStorage` — 506 used**
+**`unlimitedStorage` — 840 used**
+
+The dashboard REFUSES the submission without this one — "A justification for
+unlimitedStorage is required." It is entered on the **Privacy practices** tab
+beside the other permission justifications, not on the package tab.
+
+The earlier draft here said "only the list is kept there", which the schema in
+`src/background/list-store.js` contradicts: the same database also holds the
+sync bookkeeping (the committed root, the verified group tables, one record per
+downloaded chunk), the `extras` object carrying the ranked slice — kept whole
+precisely because "there is no 10 MB quota here" — and the user's own manual
+rows under the `*` platform. A justification the code contradicts is exactly
+the mismatch that gets a version rejected, so it now names all of it.
 
 ```
-The published blocklist is kept in the extension's own IndexedDB database
-rather than in chrome.storage, because it can run to millions of entries and
-is brought up to date piece by piece rather than re-downloaded. This
-permission lifts the browser's default storage quota so a large list is
-neither refused nor evicted. Only the list is kept there: numeric account
-ids, usernames, display names and a tag per entry, exactly as published.
-Nothing in it is transmitted anywhere, and uninstalling removes it.
+The blocklist is kept in the extension's own IndexedDB database rather than in
+chrome.storage, because it can run to millions of entries and is brought up to
+date piece by piece rather than re-downloaded whole. This permission lifts the
+browser's default storage quota, so a large list is neither refused nor evicted
+part-way through an update, which would leave the user unprotected.
+
+The database holds the published list and the bookkeeping needed to update it:
+per listed account a numeric id, username, display name and one tag, exactly as
+published; the signed index and the records of the hash-named chunks already
+fetched; the ranked slice used for ordering; and any account the user has added
+by hand. No browsing history and no page content is kept there. Nothing in it is
+transmitted anywhere, and uninstalling removes all of it.
 ```
 
 **`alarms` — 598 used**
