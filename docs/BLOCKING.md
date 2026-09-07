@@ -40,7 +40,7 @@ the site's own code to compose the request, so it is on by default.
 |---|---|
 | `module` | read off an operation node the page has loaded — verified this page load |
 | `learned` | this browser saw the module once, or a block actually succeeded with it; remembered in `learnedDocIds` and replayed into every later page |
-| `supplied` | published with the blocklist. **Dashboard → Block operation.** One save fixes every install, including ones that have never seen the site's block dialog |
+| `supplied` | published with the blocklist — `docIdOverrides` on the signed root of the chunked list, or in a legacy whole file. **Dashboard → Block operation.** One save fixes every install, including ones that have never seen the site's block dialog |
 | `captured` | watched leaving this browser in a real block request |
 
 A doc_id the site rejects is forgotten rather than retried against every future target,
@@ -61,6 +61,16 @@ The extension solves this by sweeping Meta's Relay store, which holds `id ↔ us
 pairs for everything on screen, and caching that mapping in `chrome.storage`. So a list
 expressed purely in numeric IDs still matches a page that only shows usernames, and vice
 versa. The mapping improves the more you browse.
+
+Membership itself is answered by the service worker, from the list database in
+IndexedDB, in batches: a tab collects the ids and usernames on screen and asks once, and
+the worker answers by exact id and by normalised username — lowercase, leading `@`
+stripped, the same rule the server's `normUser` applies before publishing — scoped to the
+platform the tab is on, with manual entries (which carry no platform) matching both. Only
+the positives come back, so on a feed where nearly every author is clean the reply is
+nearly empty. A tab holds only what it has looked up: a small cache of verdicts, negatives
+included, each stamped with the list's generation and dropped when the list changes. No
+tab holds the list.
 
 Numeric IDs are still the better key: they survive a username change.
 
@@ -148,12 +158,14 @@ perfectly healthy.
 It needs **no new permissions**: `chrome.tabs.create` requires none, and the tab queries
 run off the host permissions already in the manifest.
 
-**On by default in an unpacked build, off in a published one.** Chrome puts `update_url`
-in the manifest of a store install and leaves it out of an unpacked one, which is the
-only signal available without asking for the `management` permission; a build that cannot
-tell answers "no", so the experiment is never on by accident in somebody's browser.
-Ticking or unticking the box in options makes the choice explicit and the build stops
-deciding.
+**On by default, for everyone.** It used to follow the build — on when unpacked, off in a
+store install, decided by whether Chrome put `update_url` in the manifest, which is the
+only signal available without asking for the `management` permission. But a queued block
+that only runs while a tab happens to be open is a block most people never see happen, so
+the kept tab became the default (`experimentalOwnTab: true` in `src/common/protocol.js`);
+existing installs were moved once by `CONFIG_REV` 4 in the service worker, including any
+that had turned it off, and from then on ticking or unticking the box in options is what
+decides.
 
 Verified in the signed-in session with every Meta tab closed: the extension opened one,
 and it resolved and logged a dry-run block. What Chrome says about that tab is worth

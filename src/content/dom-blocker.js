@@ -3,7 +3,8 @@
  *
  * Hides content authored by blocked profiles. This layer is always safe: it
  * sends no requests and changes nothing on the account, so it is on by default
- * and takes effect the instant the blocklist loads.
+ * and takes effect as soon as the worker has answered for what is on screen --
+ * the list lives in its IndexedDB, and this tab asks about authors in batches.
  *
  * Selector policy: Comet and Barcelona generate obfuscated, rotating CSS class
  * names, so keying on `class` guarantees breakage. We key only on semantic and
@@ -62,6 +63,13 @@
   const remoteTries = new WeakMap(); // node -> { sig, tries } for the content it shows now
   const MAX_REMOTE_TRIES = 3;
   const inflight = new Map();        // probe id -> node
+  // Nodes whose authors the worker is being asked about, keyed to the content
+  // they showed when the question went out. A node found here under the same
+  // signature is skipped by the next pass rather than asked again; a node
+  // whose content changed is a new question.
+  const pendingLookup = new WeakMap(); // node -> sig
+  const MAX_LOOKUP_NODES = 200;        // per pass; the rest wait for the next one
+  let rescanWhenDone = false;
   let scanQueued = false;
   let identityInflight = false;
   let stats = { hidden: 0, scanned: 0 };
@@ -220,6 +228,7 @@
     if (!settings.hideEnabled) return;
     const nodes = candidateNodes(root || document);
     const needRemote = [];
+    const needLookup = [];
 
     for (const node of nodes) {
       if (!node.isConnected) continue;
@@ -232,20 +241,35 @@
       stats.scanned++;
 
       const local = localIdentities(node);
-      const m = identity.matchAny(local);
+      const m = identity.matchAnyCached(local);
       if (m) {
         decisions.set(node, { sig, blocked: true, match: m });
         applyHide(node, m);
         continue;
       }
 
-      // No local hit. If the node previously was hidden but its content
-      // changed, un-hide it before re-judging.
+      // Not answered yet, for at least one of these identities: this tab has
+      // never asked the worker about it, or asked under a list that has since
+      // been replaced. Queue the question and leave the node exactly as it is
+      // -- no verdict, no probe -- until the answer is in. In particular the
+      // numeric-id shortcut below must not run: "the id did not match" is only
+      // conclusive once somebody has actually looked it up.
+      if (m === undefined) {
+        if (pendingLookup.get(node) === sig) continue;   // already asked about this content
+        if (needLookup.length >= MAX_LOOKUP_NODES) { rescanWhenDone = true; continue; }
+        pendingLookup.set(node, sig);
+        needLookup.push({ node, sig, identities: local });
+        continue;
+      }
+
+      // Every identity is a cached miss. If the node previously was hidden
+      // but its content changed, un-hide it before re-judging.
       if (prev && prev.blocked) unhide(node, true);   // content changed; old reveal no longer applies
 
-      // A numeric id that did not match is a conclusive "not blocked". Only
-      // usernames -- or nothing at all -- leaves room for the Relay store or a
-      // React fiber to know better, so those are worth a round-trip.
+      // A numeric id that did not match is a conclusive "not blocked" -- the
+      // worker has answered for it. Only usernames -- or nothing at all --
+      // leaves room for the Relay store or a React fiber to know better, so
+      // those are worth a round-trip.
       const haveNumericId = local.some(x => x.id);
       if (haveNumericId) {
         decisions.set(node, { sig, blocked: false, match: null });
@@ -281,7 +305,57 @@
       }
     }
 
+    if (needLookup.length) resolveLookups(needLookup);
     if (needRemote.length) requestIdentities(needRemote);
+  }
+
+  /**
+   * Ask the worker about a pass's unanswered authors, then judge those nodes
+   * the way scan() would have.
+   *
+   * One question per pass: identity.lookupAny coalesces everything into a
+   * single message and answers from its cache from then on. scan() is only
+   * ever called from an idle callback, a frame, the sweep timer or the
+   * mutation observer, and nothing awaits it, so this tail can be async. By
+   * the time it runs the feed may have moved -- React recycles these nodes --
+   * so each node is judged only if it still shows the content it was asked
+   * about; anything else is a new question for the next pass.
+   */
+  async function resolveLookups(list) {
+    const union = [];
+    for (const e of list) for (const ident of e.identities) union.push(ident);
+    try {
+      await identity.lookupAny(union);
+    } catch (e) {
+      log('lookup failed', e && e.message);
+    }
+    let again = false;
+    for (const e of list) {
+      const node = e.node;
+      if (pendingLookup.get(node) === e.sig) pendingLookup.delete(node);
+      if (!node.isConnected || signature(node) !== e.sig) continue;
+      const m = identity.matchAnyCached(e.identities);
+      if (m) {
+        decisions.set(node, { sig: e.sig, blocked: true, match: m });
+        applyHide(node, m);
+        continue;
+      }
+      // Still unanswered: the list changed underneath the question, or the
+      // worker did not reply. Left undecided, and NOT re-queued from here --
+      // the refresh broadcast rescans on a new list, and the periodic sweep
+      // asks again in a couple of seconds if the worker was merely away.
+      // Re-queueing at once would spin against a worker that is gone.
+      if (m === undefined) continue;
+      const prev = decisions.get(node);
+      if (prev && prev.blocked) unhide(node, true);   // content changed; old reveal no longer applies
+      // The worker has answered, so a numeric id that did not match is now
+      // conclusive. A username-only miss is left undecided: the next pass
+      // sees the cached miss and takes it to the MAIN world, exactly as it
+      // would have without the detour through here.
+      if (e.identities.some(x => x.id)) decisions.set(node, { sig: e.sig, blocked: false, match: null });
+      else again = true;
+    }
+    if (again || rescanWhenDone) { rescanWhenDone = false; queueScan(); }
   }
 
   async function requestIdentities(nodes) {
@@ -289,7 +363,7 @@
     identityInflight = true;
     try {
       const res = await bridge.request(P.RESOLVE_IDS, { nodes }, 15000);
-      handleAnswers(res && res.answers);
+      await handleAnswers(res && res.answers);
     } catch (e) {
       log('identity request failed', e && e.message);
     } finally {
@@ -303,7 +377,8 @@
     }
   }
 
-  function handleAnswers(answers) {
+  async function handleAnswers(answers) {
+    const answered = [];
     for (const a of answers || []) {
       const node = inflight.get(a.probe);
       if (!node || !node.isConnected) continue;
@@ -315,16 +390,29 @@
         tries: ((rt && rt.sig === sigNow) ? rt.tries : 0) + 1
       });
       // Anything the MAIN world learned about id<->username is worth keeping.
-      for (const ident of a.identities || []) {
+      const identities = a.identities || [];
+      for (const ident of identities) {
         if (ident.id && ident.username) identity.learn(ident.id, ident.username);
       }
-      const m = identity.matchAny(a.identities);
+      answered.push({ node, identities });
+    }
+    // Every author of the batch in one question to the worker, learned pairs
+    // included, so the alias bridge is in place before anything is judged.
+    const all = [];
+    for (const e of answered) for (const ident of e.identities) all.push(ident);
+    if (all.length) await identity.lookupAny(all);
+    for (const e of answered) {
+      const node = e.node;
+      if (!node.isConnected) continue;
+      const m = identity.matchAnyCached(e.identities);
       if (m) {
         decisions.set(node, { sig: signature(node), blocked: true, match: m });
         applyHide(node, m);
-      } else if ((a.identities || []).length) {
-        // The MAIN world identified the author and it is not on the list, so
-        // this is now a conclusive answer worth caching.
+      } else if (m === null && e.identities.length) {
+        // The MAIN world identified the author and the worker says it is not
+        // on the list, so this is now a conclusive answer worth caching. An
+        // unanswered question (the list changed mid-flight) caches nothing;
+        // the rescan that follows the refresh asks again.
         decisions.set(node, { sig: signature(node), blocked: false, match: null });
       }
     }
@@ -342,6 +430,9 @@
     for (const node of candidateNodes(document)) {
       decisions.delete(node);
       remoteTries.delete(node);
+      // A question in flight is answered under whatever the cache holds when
+      // it lands; dropping the stamp lets the next pass ask afresh.
+      pendingLookup.delete(node);
     }
   }
 

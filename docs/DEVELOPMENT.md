@@ -9,12 +9,12 @@ Running the tests, what each one covers, and how a release is built.
 ### Testing
 
 ```bash
-node tools/check.js            # static: syntax, manifest refs, MV3 CSP, locales
-node tools/queue-test.js       # block queue + rate limiter (mocked chrome.*)
-node tools/firebase-test.js    # security-rules matrix + ported logic, emulator
+node tools/check.js            # static: syntax, manifest refs, MV3 CSP, locales, doc links
+node tools/queue-test.js       # service worker: block queue, rate limiter, list sync (mocked chrome.*)
+node tools/inject-test.js      # the MAIN-world script in a vm, against a fake Relay
+node tools/list-sync-test.js   # the chunked-list walk against a synthetic v3 tree
 node tools/e2e-test.js         # hiding + Relay discovery, browser
-node tools/dashboard-visual.js # the dashboard, rendered against fixtures
-npm test                       # the first four
+npm test                       # everything above but the browser
 ```
 
 `check.js` also holds the rules that keep vocabulary from drifting back: the
@@ -55,6 +55,28 @@ untagged id counts as `other`, and that the popup's user-initiated **Block now**
 goes through regardless — and that both rankers read the published weights the
 same way, at the defaults and at tuned values.
 
+The same harness walks the chunked list. A synthetic v3 tree — signed root,
+group tables, gzip chunks, an extras object — is built in-process and served
+by a mocked `fetch`, so the suite needs no server and no fixture files, and it
+checks the walk against the things that go wrong on a real mirror: an
+incremental refresh downloads only the chunks whose names changed; an object
+whose bytes do not hash to its name is refused and the next mirror tried; a
+root older than the one already installed is refused as a rollback unless it
+came from a self-hosted primary; a walk killed part-way resumes from the
+committed buckets and refetches nothing it already holds; a `k` change
+re-buckets the whole platform without a gap in lookups; pruning the queue is
+scoped to the platform; a lookup answers by exact id and by normalised
+username, positives only, with manual entries matching both platforms; and a
+self-hosted whole-file list still imports. `list-sync-test.js` exercises the
+walk on its own, against a synthetic tree of the same shape.
+
+The harnesses run under plain Node, which is why the floor is Node 20: the
+walk uses the global `crypto.subtle` and `DecompressionStream`, and both exist
+there without a polyfill. IndexedDB does not, so the worker takes its list
+store through a seam, `globalThis.CB_LIST_STORE_FACTORY`, which the harnesses
+point at a Map-backed implementation of the same interface. No dependency was
+added for any of it.
+
 The two switches get all four combinations, driven end to end through a real
 refresh for the cold side and a real enqueue for the warm one: `blockSeen` off
 with `blockFromList` on (the pair the old radio could not express), the
@@ -70,17 +92,19 @@ wedges the queue only until its lease expires.
 
 `e2e-test.js` loads the extension into real Chrome and exercises it against live
 `threads.com` and `facebook.com`: manifest load, service-worker boot, a list
-fetch from a seeded Firestore emulator, bridge handshake, module hook, Relay
-discovery, that content from a listed profile is genuinely hidden, and that the
-service worker derives its ranked targets locally from the published metadata.
-It asserts that **no real block is attempted**.
+fetch from a v3 tree served by the harness's own `node:http` server, bridge
+handshake, module hook, Relay discovery, that content from a listed profile is
+genuinely hidden, and that the service worker derives its ranked targets
+locally from the published metadata. It asserts that **no real block is
+attempted**.
 
-Current status — **26/26 browser · 90/90 queue · 132/132 firebase · static
-clean**, and `dashboard-visual.js` green. A sample of the browser run:
+Status is whatever the runs print; the counts an earlier version of this
+paragraph carried (26 browser, 90 queue, and 132 for a Firebase suite that no
+longer exists) are history. A sample of the browser run:
 
 ```
 PASS  extension service worker started
-PASS  blocklist fetched + parsed by service worker      — 1 ids, 1 usernames
+PASS  blocklist fetched + parsed by service worker      — 1 ids, 1 usernames, v3
 PASS  MAIN world hooked Meta module registry            — 4869 modules, 578 graphql
 PASS  live Relay environment discovered                 — BarcelonaRelayEnvironment, 593 records
 PASS  Relay commitMutation available
@@ -98,6 +122,32 @@ PASS  facebook: Relay environment reachable             — CometRelayEnvironmen
 Note: current Chrome builds ignore the `--load-extension` switch, so the harness loads the
 extension over CDP (`Extensions.loadUnpacked`). Loading unpacked via `chrome://extensions`
 in normal use is unaffected.
+
+---
+
+### Self-hosting a list
+
+`listUrl` in the stored settings is the primary list address. No page writes
+it — the harnesses and a self-hoster set it in `chrome.storage` — and its
+shape selects the format, so there is no second setting to get wrong:
+
+- the shipped default (`CB_LIST_URL`) runs the chunked walk over the public
+  bases — the pointer's `v3Mirrors`, then `CB_V3_MIRRORS` (raw, jsDelivr, the
+  relay, the origin) — and falls back to the whole-file mirrors only if no
+  root verifies;
+- a URL ending in `/blocklist/v3/manifest.json` runs the same walk with that
+  base first and the public ones after it. A self-hosted root may be unsigned,
+  and it may roll back — the two exemptions a self-hosted primary has always
+  had;
+- any other URL is read as a whole-file list, unsigned allowed, rollback
+  allowed, exactly as before: a `blocklist.json` on a static host, or the
+  NDJSON-lines shape. It is imported wholesale into the same database, so
+  switching sources replaces the list rather than merging two.
+
+`tools/run-real-block.js` still narrows the list to one id through a
+session-local whole-file `blocklist.json`, which is the legacy path and keeps
+working; the line where it echoes `blocklist.ids` back from the refresh reply
+reads nothing now that the record no longer carries the arrays.
 
 ---
 
@@ -140,6 +190,8 @@ including the parts that cannot be engineered away.
 
 [PRIVACY.md](../PRIVACY.md) is the privacy policy the store requires, and its
 claims are checkable against the source: the only outbound requests in the
-extension go to the two Meta origins and the one baked-in list address.
+extension go to the two Meta origins and the hosts compiled into
+`src/common/protocol.js` — the list bases, the pointer hosts, and the report
+relay and origin.
 
 ---

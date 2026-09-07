@@ -37,24 +37,28 @@ checkpoint.
 
 So the queue tracks how each target got there:
 
-- **warm** — resolved from the page you are looking at. Paced normally (4–11s),
-  limited only by the overall hourly cap.
+- **warm** — resolved from the page you are looking at. Paced at a human
+  rhythm (`warmMinDelayMs`–`warmMaxDelayMs`, 4–10 s by default), limited only
+  by the overall hourly cap.
 - **cold** — nominated by the trending metadata published with the list, never
-  seen in this browser. Paced slowly (20–45s) and held to a ceiling of its own
-  (`maxColdBlocksPerHour`, default 20).
+  seen in this browser. Paced on a dial of its own (`minDelayMs`–`maxDelayMs`,
+  also 4–10 s by default; it shipped at 20–45 s) and held to a ceiling of its
+  own (`maxColdBlocksPerHour`, default 100).
 
 <a id="the-two-ceilings"></a>
 **The two ceilings, and which one actually stops you.** `maxBlocksPerHour`
-(default **15**) is checked first and counts *every* attempt, warm and cold
-together; `maxColdBlocksPerHour` (default **20**) is checked afterwards and
-counts only the cold ones. At those two values the cold ceiling is inert: 15
-attempts of any kind are spent before 20 cold ones can be, so cold work is in
-practice limited to 15 an hour minus whatever warm work happened. Raising the
+(default **100**) is checked first and counts *every* attempt, warm and cold
+together; `maxColdBlocksPerHour` (default **100**) is checked afterwards and
+counts only the cold ones. At those two values the cold ceiling is inert: 100
+attempts of any kind are spent before 100 cold ones can be, so cold work is in
+practice limited to 100 an hour minus whatever warm work happened. Raising the
 cold ceiling on its own therefore changes nothing — the overall one has to move
-with it. This is deliberate: 15 an hour is the number chosen against the
-checkpoint risk, and it is the one worth thinking hard about before changing.
-The cold ceiling remains useful *below* 15, where it does bind, and at **0**,
-which is the way to say "never block anyone I have not seen".
+with it. This is deliberate: the overall ceiling is the number chosen against
+the checkpoint risk (it shipped at 15 for a long while), and it is the one worth
+thinking hard about before changing; a day is capped separately by
+`maxBlocksPerDay`, 1,000. The cold ceiling remains useful *below* the overall
+one, where it does bind, and at **0**, which is the way to say "never block
+anyone I have not seen".
 
 **`blockSeen` is the warm half; `blockFromList` is the cold half.** That is all
 the two switches are underneath, and it is why there are two of them rather
@@ -96,30 +100,41 @@ Both are things the browser already hands to every site it loads, and neither
 needs an IP lookup, a geo database, or a third-party service. Turn it off with
 **Send my time zone and language** in options.
 
-The published list carries 14 daily buckets and a region tally per approved
-account, and the **extension ranks them locally**:
+The list carries, per approved account, a confidence in quarter steps, the
+week it was last reported, a capped count for the latest week, and the *names*
+of up to three regions and three languages its reports came from — an earlier
+shape carried 14 daily buckets and per-region counts, which described the
+reporters rather too well. In the chunked list that metadata is the *extras*
+object the signed root names (`targets[]`, `targetsAvailable`, the manual
+entries); in a legacy whole file it is `targets`. Either way the **extension
+ranks them locally**:
 
 ```
 rank = trust × recency × (1 + velocityWeight × velocity7d) × locality × boost
 
   trust      trust-weighted report score (see "Who filed the report")
   recency    0.5 ^ (days since last report / halfLifeDays)
-  velocity   reports in the last 7 days
+  velocity   reports in the latest week (the capped `recent` count)
   locality   localityFloor + (1 − localityFloor) × how much of this clone's
              activity is near you
   boost      1 + uniqueReporterBoost × log2(1 + unique reporters)
 ```
 
-**The dials are published, not compiled in.** `rankWeights` rides in the list —
+**The dials are published, not compiled in.** `rankWeights` rides on the
+signed root of the chunked list (in a legacy whole file, at the top level) —
 `halfLifeDays` 7, `velocityWeight` 1, `localityFloor` 0.25,
 `localityLangFactor` 0.8 (language counts a little less than region),
 `uniqueReporterBoost` 0 — so the owner can retune ranking from the dashboard
 without shipping an extension update, and the dashboard's preview ranks with
-exactly the numbers clients will. Those defaults are today's ranking, term for
-term: `uniqueReporterBoost` at 0 makes its factor exactly 1, so the formula is
-byte-identical to the one that predates the dials. A list published before they
-existed carries none, and a single nonsensical value falls back on its own
-rather than dragging the tuned ones down with it.
+exactly the numbers clients will. Retuning changes one small signed document
+and not a single chunk, which is why the dials and `docIdOverrides` live on the
+root rather than in the extras object; and recency ages from the root's
+`updatedAt`, so two installs holding the same root rank the same. Those
+defaults are today's ranking, term for term: `uniqueReporterBoost` at 0 makes
+its factor exactly 1, so the formula is byte-identical to the one that predates
+the dials. A list published before they existed carries none, and a single
+nonsensical value falls back on its own rather than dragging the tuned ones
+down with it.
 
 The unique-reporter term is the one worth explaining. Trust is linear, so two
 reporters at 0.75 outrank one at 1.5 by nothing at all; raise the boost and four

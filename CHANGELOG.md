@@ -8,7 +8,22 @@ The versions below are the extension's `manifest.json` version. Anything under
 
 ---
 
-## Unreleased
+## 1.1.0 — 6 September 2026
+
+### The list now scales to millions of entries
+
+- **The extension downloads a small signed index and only the parts that
+  changed.** The blocklist used to be one file that every installation
+  downloaded, checked and parsed whole, and that every open tab kept a copy
+  of in memory; past about 1,700 accounts it stopped working. The list now
+  lives in a database of the extension's own, is brought up to date piece by
+  piece, and no tab holds the whole list any more — a page asks the extension
+  about the accounts on screen and hears back only about the ones that are
+  listed. The counts on the popup, the options page and the activity page
+  come from that database. Nothing new is sent: which pieces are fetched
+  depends on what changed on the server and what this installation already
+  holds, never on what you looked at. A self-hosted whole-file list keeps
+  working.
 
 ### The backend is now a server of its own
 
@@ -33,14 +48,16 @@ one of them changes what the privacy policy says.
   extension will only ever accept a hostname that was already compiled into the
   build, so nobody who takes over that document can redirect you somewhere new.
 
-**A privacy change, stated plainly.** Reports now carry a two-letter country,
-worked out at the network edge from the address the request came from. That is
-an IP lookup, it is server-side, and no setting of yours declines it — which
-the previous privacy policy said would never happen, so the policy has been
-corrected rather than quietly left alone. The address itself is never stored:
-rate limiting keeps only a hash of it under a salt that changes every hour, in
-a table that expires. What you can still decline, as before, is the
-finer-grained time zone your browser reports.
+**A privacy change, stated plainly.** A report now carries the address it was
+filed from, the **city** and two-letter **country** the network in front of
+the server resolves from that address, and the browser identification string
+it was sent with. All of that is server-side and no setting of yours declines
+it — which the previous privacy policy said would never happen, so the policy
+has been corrected rather than quietly left alone. Rate limiting is unchanged
+and still forgets: its counters keep only a hash of the address under a salt
+that changes every hour, in a table that expires. What you can still decline,
+as before, is the finer-grained time zone your browser reports. Fetching the
+list still tells the server nothing about you at all.
 
 **Why it moved at all.** The old design used database security rules as its
 entire gate. Rules can check what a request looks like but not who is sending
@@ -80,14 +97,14 @@ why it did not work, are in `docs/BACKEND-PLAN.md`.
 
 ### It can work while you are not
 
-- **Experimental: a tab of its own.** Blocking runs inside a Facebook or
-  Threads page, so with no tab open the queue simply waited for you. With this
-  on, the extension keeps one **pinned** tab for the job — opened when there is
-  work and nobody is browsing, and then left alone rather than appearing and
-  vanishing. Close it whenever you like: it comes back a minute later, waits
-  longer each time you close it again, and after the fifth switches itself off.
-  It ships **off** in the published extension and on only in development
-  builds. Settings → *Open a tab of its own to get through the queue*.
+- **A tab of its own.** Blocking runs inside a Facebook or Threads page, so
+  with no tab open the queue simply waited for you. The extension now keeps
+  one **pinned** tab for the job — opened when there is work and nobody is
+  browsing, and then left alone rather than appearing and vanishing. Close it
+  whenever you like: it comes back a minute later, waits longer each time you
+  close it again, and after the fifth switches itself off. It is **on** by
+  default — including, once, for installs that had turned it off — and
+  Settings → *Open a tab of its own to get through the queue* turns it off.
 
 ### The activity page holds what it shows
 
@@ -127,20 +144,21 @@ why it did not work, are in `docs/BACKEND-PLAN.md`.
 ### Settings
 
 - The blocklist is refreshed **every 10 minutes** instead of every hour, so an
-  approved clone reaches installations sooner. The list is a static file served
-  with an ETag, so an unchanged one costs a few hundred bytes and no database
-  read.
+  approved clone reaches installations sooner. The list is a small signed index
+  plus content-addressed pieces, so an unchanged one costs one small request and
+  no database read.
 - Pacing delays are shown **in seconds** rather than milliseconds.
 - **The language can be chosen on the first-run guide**, in the top corner,
   rather than only in Settings. The extension follows the browser's own
   language and is right for nearly everybody, which is exactly why the
   exception matters: on a page that is entirely prose, somebody reading the
   wrong one should not have to go hunting for the setting.
-- `maxColdBlocksPerHour` was raised from **4** to **20**. Note that it does not
-  bind at that value: `maxBlocksPerHour` (15) is checked first and counts warm
-  and cold attempts together, so cold work is still limited to 15 an hour minus
-  whatever warm work happened. Raising the cold ceiling alone changes the
-  pacing not at all.
+- `maxColdBlocksPerHour` was raised from **4** to **100**, and
+  `maxBlocksPerHour` from **15** to **100**, with a day capped at **1,000**.
+  The cold ceiling still does not bind on its own: the overall one is checked
+  first and counts warm and cold attempts together, so cold work is limited to
+  100 an hour minus whatever warm work happened. Raising the cold ceiling alone
+  changes the pacing not at all.
 - The options page no longer contradicts itself: controls governed by a switch
   that is off are dimmed, and the two under *Pause blocking* — which are inert
   while paused rather than active, the opposite of every other indented control

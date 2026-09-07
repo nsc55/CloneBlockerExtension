@@ -107,6 +107,15 @@ function buildExt() {
 
   // Switch to Vietnamese, and seed enough state that every chip, control and
   // empty-state actually renders. An unpopulated page hides most of its text.
+  //
+  // The list itself lives in IndexedDB now, so the rows go there -- from the
+  // options page, which shares the worker's origin and so its database --
+  // and the chrome.storage record is the slim one: counts, no arrays. The
+  // tag chips and the names the Activity page draws come from the worker's
+  // join over those rows, which is the path a real install takes. The schema
+  // is the worker's (protocol.js names the database and its version); the
+  // stores are created here only if the worker has not opened it yet, in the
+  // same shape, so whichever side opens first the other finds what it expects.
   const opt = await open('src/options/options.html');
   await ev(opt.sessionId, `
     (async () => {
@@ -128,12 +137,47 @@ function buildExt() {
           { platform: 'facebook', id: '7700000003', ok: true,  dryRun: true,  at: now - 300000 }
         ],
         blocklist: {
-          ids: ['7700000001', '9900000001'], usernames: [],
-          idTags: { '7700000001': 'redbull', '9900000001': 'clone', '9900000002': 'scam' },
-          targets: [], fetchedAt: now, source: 'x', count: 2,
+          format: 'v3', generation: 1,
+          counts: { ids: 3, usernames: 0, manualIds: 0, manualUsernames: 0,
+                    byPlatform: { threads: { ids: 3, usernames: 0 }, facebook: { ids: 0, usernames: 0 } } },
+          count: 3, chunks: { total: 1, changed: 1, bytes: 0 },
+          targets: [], targetsAvailable: 0, fetchedAt: now, source: 'x', verified: true,
           updatedAt: new Date(now).toISOString()
         },
         idNames: { 'threads:9900000001': { u: 'someclone', d: 'Ai Do' } }
+      });
+
+      const rows = [
+        { key: 'threads:7700000001', platform: 'threads', kind: 'id', chunk: 'threads:4:0',
+          id: '7700000001', u: 'red.bull.clone', d: 'Red Bull', uname: 'red.bull.clone', t: 'redbull' },
+        { key: 'threads:9900000001', platform: 'threads', kind: 'id', chunk: 'threads:4:0',
+          id: '9900000001', u: 'someclone', d: 'Ai Do', uname: 'someclone', t: 'clone' },
+        { key: 'threads:9900000002', platform: 'threads', kind: 'id', chunk: 'threads:4:0',
+          id: '9900000002', t: 'scam' }
+      ];
+      const name = globalThis.CB_LIST_DB || 'cb-blocklist';
+      const version = globalThis.CB_LIST_DB_VERSION || 1;
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open(name, version);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'k' });
+          if (!db.objectStoreNames.contains('groups')) db.createObjectStore('groups');
+          if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
+          if (!db.objectStoreNames.contains('rows')) {
+            const st = db.createObjectStore('rows', { keyPath: 'key' });
+            st.createIndex('byUname', 'uname', { unique: false });
+            st.createIndex('byChunk', 'chunk', { unique: false });
+          }
+        };
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['rows'], 'readwrite');
+          for (const r of rows) tx.objectStore('rows').put(r);
+          tx.oncomplete = () => { db.close(); resolve(); };
+          tx.onerror = () => reject(tx.error);
+        };
       });
       return 1;
     })()`);

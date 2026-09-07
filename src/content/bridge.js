@@ -152,7 +152,8 @@
     });
   }
 
-  // Broadcasts from the service worker (e.g. the blocklist refreshed).
+  // Broadcasts from the service worker (e.g. the blocklist refreshed, whose
+  // payload carries the new list generation).
   const swListeners = new Map();
   try {
     chrome.runtime.onMessage.addListener((msg) => {

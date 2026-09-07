@@ -341,42 +341,61 @@ Two wordings are deliberate:
 
 ### Permission justifications
 
-Three fields in the dashboard — one per API permission, plus a single field
+Four fields in the dashboard — one per API permission, plus a single field
 covering every host pattern — each capped at 1,000 characters like the
-purpose field. Written to match the code, and two claims from an earlier
-draft died on that check: `alarms` does **not** pace blocks (the only alarm
-is `cb-refresh-blocklist`; pacing is the gate in the service worker, held in
-storage and driven by tab requests), and the list is **not** read from
-Firestore any more (`LIST_URL` is the Hosting CDN snapshot; Firestore is
-where reports are written). A justification the code contradicts is exactly
-the mismatch the store says gets a version rejected.
+purpose field. Written to match the code, and claims from earlier drafts
+died on that check: `alarms` does **not** pace blocks (pacing is the gate in
+the service worker, held in storage and driven by tab requests; the alarms
+are the list refresh, the check for queued work nobody is around to do, and
+the timer that reopens the extension's own tab), and the list is **not** read
+from Firestore, or from any database: it is a signed index plus
+content-addressed chunks on public mirrors, kept in the extension's own
+IndexedDB. A justification the code contradicts is exactly the mismatch the
+store says gets a version rejected.
 
-**`storage` — 714 used**
+**`storage` — 862 used**
 
 ```
 Keeps the extension's working data in Chrome's extension storage: the user's
 settings (blocking switches, pacing caps, tag filter, hiding, language); the
-cached blocklist, so the list is not re-fetched on every page load; the
-block queue, activity history and pacing timestamps that hold blocking to
-its hourly ceilings; a local id-to-username cache, built from profiles that
-appeared on pages the user visited, for matching listed accounts when a page
-shows only one of the two; captured block-request templates, only if the
-user enables that option; and the one-time flag that keeps the welcome page
-from reopening. Nothing in storage is transmitted anywhere by the extension,
-and uninstalling removes all of it.
+blocklist's status record and the ranked slice it works from, so those are
+not recomputed on every page load (the list's rows themselves are in
+IndexedDB, under unlimitedStorage); the block queue, activity history and
+pacing timestamps that hold blocking to its hourly ceilings; a local
+id-to-username cache, built from profiles that appeared on pages the user
+visited, for matching listed accounts when a page shows only one of the two;
+captured block-request templates, only if the user enables that option;
+reports that could not be sent yet; and the one-time flag that keeps the
+welcome page from reopening. Nothing in storage is transmitted anywhere by
+the extension, and uninstalling removes all of it.
 ```
 
-**`alarms` — 356 used**
+**`unlimitedStorage` — 506 used**
 
 ```
-One repeating alarm, and nothing else: it refreshes the blocklist on an
-hourly schedule, so moderator decisions — new approvals and removals — reach
-every install. A Manifest V3 service worker is shut down between events, so
-chrome.alarms is the supported way to make a periodic refresh fire. No other
-alarm exists and no other feature uses the permission.
+The published blocklist is kept in the extension's own IndexedDB database
+rather than in chrome.storage, because it can run to millions of entries and
+is brought up to date piece by piece rather than re-downloaded. This
+permission lifts the browser's default storage quota so a large list is
+neither refused nor evicted. Only the list is kept there: numeric account
+ids, usernames, display names and a tag per entry, exactly as published.
+Nothing in it is transmitted anywhere, and uninstalling removes it.
 ```
 
-**Host permissions — 940 used**
+**`alarms` — 598 used**
+
+```
+Two repeating alarms and one timer, and nothing else. The list refresh fires
+every ten minutes, so moderator decisions — new approvals and removals —
+reach every install; a Manifest V3 service worker is shut down between
+events, so chrome.alarms is the supported way to make a periodic refresh
+fire. A fifteen-minute check asks whether approved accounts are queued while
+no Facebook or Threads tab is open, and opens the extension's own pinned tab
+if so. A one-shot timer reopens that tab after a wait when the user closed
+it by hand. No alarm paces blocks and no other feature uses the permission.
+```
+
+**Host permissions — 954 used**
 
 ```
 facebook.com, threads.net, threads.com — the two sites the extension works
@@ -386,23 +405,27 @@ issue blocks through the site's own in-page block mechanism. Filing a report
 reads the user's own numeric account id from the page, hashed in the browser
 into the reporter pseudonym.
 
-firestore.googleapis.com, cloneblocker.tree55.com — the backend. The
-published, human-reviewed blocklist is fetched from the Hosting origin as a
-CDN-cached static file; reports the user files are written to the project's
-Firestore REST endpoint. Both addresses are compiled in, which is why they
-are required rather than optional: nothing for the user to type, no
-permission prompt anywhere in the product.
+tree55.com — our own backend, cloneblocker.tree55.com: the fallback list
+source, and where reports go when the relay is unreachable. By default the
+list is read over anonymous CORS from public mirrors that need no host
+permission (raw.githubusercontent.com, cdn.jsdelivr.net, an AWS relay): a
+signed index plus hash-named chunks, verified against a compiled-in key.
 
-The whole manifest is two API permissions (storage, alarms) and these five
-patterns — no tabs, no activeTab, no scripting.
+Compiled in, hence required: nothing to type, no prompt. Three API permissions
+(storage, unlimitedStorage, alarms) and these four patterns; no tabs, no
+activeTab, no scripting.
 ```
 
 The blocks are meant to be checked against `manifest.json` rather than
-trusted: **two** API permissions, `storage` and `alarms`; **five** host
-patterns, `*.facebook.com`, `*.threads.net`, `*.threads.com`,
-`firestore.googleapis.com` and `cloneblocker.tree55.com`; and no
+trusted: **three** API permissions, `storage`, `alarms` and
+`unlimitedStorage`; **four** host patterns, `*.facebook.com`,
+`*.threads.net`, `*.threads.com` and `*.tree55.com`; and no
 `optional_host_permissions` block at all, which is why there is no prompt
-anywhere in the product. There is deliberately no `tabs` permission: the popup
+anywhere in the product. The public list mirrors — `raw.githubusercontent.com`,
+`cdn.jsdelivr.net`, the AWS relay — are deliberately *not* host patterns: they
+answer anonymous CORS requests, the index they serve is signed and every
+chunk is hash-bound to it, so a permission there would buy nothing and widen
+the grant. There is deliberately no `tabs` permission: the popup
 and the activity page ask `chrome.tabs.query` whether a Facebook or Threads tab
 is open, and the host permissions the extension already holds for those two
 sites are what makes that answerable without a broader one.
@@ -413,7 +436,7 @@ Tick these, and be prepared to explain each:
 
 | Category | Collected? | What, and why |
 |---|---|---|
-| Personally identifiable information | **Yes** | Two things. (1) The **browser identification string** (User-Agent) the browser sends with the report, stored on the report row and visible to the moderator — it distinguishes a report filed by the extension from one posted to the intake endpoint by a script, and alongside the stored IP address in the Location row it makes repeat reporters easier to recognise. No user setting declines it. (2) A pseudonym of the user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The ID is hashed in the browser (truncated SHA-256) before sending; the raw ID never leaves the machine, and the report store is readable only by the backend owner under Firestore security rules. |
+| Personally identifiable information | **Yes** | Two things. (1) The **browser identification string** (User-Agent) the browser sends with the report, stored on the report row and visible to the moderator — it distinguishes a report filed by the extension from one posted to the intake endpoint by a script, and alongside the stored IP address in the Location row it makes repeat reporters easier to recognise. No user setting declines it. (2) A pseudonym of the user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The ID is hashed in the browser (truncated SHA-256) before sending; the raw ID never leaves the machine, and the report store is readable only by the backend owner, behind the server's admin login. |
 | User activity | **Yes** | The reports the user chooses to file: the reported account, the reason (one of seven tags), an optional note, optional links to posts. |
 | Website content | **Yes** | Only what the user attaches to a report — public post URLs and an optional short quote of the content they are reporting. If a moderator later opts the *reported* account in to the project's public page, those links and quotes can appear there; the user's note never does, and nothing identifying the reporter ever does. |
 | Location | **Yes** | Only ever attached to a report — never to a list fetch, which remains anonymous by construction. (1) IANA time zone and BCP-47 language from the browser, sent only when **Send my time zone and language** is on. (2) The **IP address** the report arrived from, stored on the report row, plus the **city** and two-letter **country** resolved from it at the network edge. All three are server-side properties of the connection, so no user setting declines them, and they are kept for as long as the report is. No geolocation API and no geo database is used — the city and country come from the CDN's own edge resolution. Shown to the moderator reviewing the report, and used to tell one reporter holding many pseudonyms from many reporters; the ranking of which clones to block is still computed locally in the user's browser and sends nothing. |
@@ -453,8 +476,9 @@ You must certify that the data is used only for the disclosed single purpose.
 That is true here — it goes to the one backend the extension is built against
 and nowhere else, and there is no analytics, telemetry, ad network or
 third-party endpoint anywhere in the code. Grep it: the only network
-destinations are the two Meta origins and the `LIST_URL` constant in
-`src/common/protocol.js`.
+destinations are the two Meta origins and the hosts compiled into
+`src/common/protocol.js` — the list bases (`LIST_V3_BASE`, `V3_MIRRORS`,
+`LIST_MIRRORS`), the pointer hosts, and the report relay and origin.
 
 ### Notes for the reviewer
 
@@ -463,9 +487,11 @@ and Threads. Suggested text:
 
 ```
 The extension works on install with no configuration: it ships pointed at
-our Firebase project's public, read-only blocklist, and the backend origins
-it needs are declared as required permissions, so there is no setup step and
-no permission prompt anywhere in the product.
+the project's public, signed blocklist — a small signed index plus
+content-addressed chunks on raw.githubusercontent.com, with cdn.jsdelivr.net,
+an AWS relay and our own origin as fallbacks — and the one backend origin it
+needs is declared as a required permission, so there is no setup step and no
+permission prompt anywhere in the product.
 
 Please note that content hiding ships DISABLED. A fresh install blocks but
 does not hide, so nothing visibly changes on the page until you turn hiding
@@ -476,9 +502,12 @@ To exercise it end to end:
   1. Install it, then load Threads (threads.com) or Facebook.
   2. Switch hiding on as above to see the list applied to the page. Hiding
      runs entirely in the browser and sends nothing.
-  3. The list is served read-only from Firestore's public REST endpoint at
-     (retired) https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current
-     — open it in a browser to see the exact bytes the extension fetches.
+  3. The list is public. Open
+     https://raw.githubusercontent.com/nsc55/cloneblocker-mirror/published/blocklist/v3/manifest.json
+     in a browser to see the signed index the extension fetches; every chunk
+     it names sits beside it under blocklist/v3/objects/, addressed by the
+     SHA-256 of its bytes, and the extension fetches only the ones whose
+     names changed since it last looked.
   4. Settings > "Dry run" resolves a real block and sends nothing, if you
      want to watch the blocking path without changing an account.
 
@@ -486,12 +515,16 @@ Real blocking is on by default but tightly paced, and the user picks where it
 may look. Two independent tick boxes, both on by default: "Block clones I run
 into" covers profiles that appeared on the page in front of them, at a human
 rhythm; "Work through the list too" additionally blocks accounts from the
-published list, paced 20-45s apart and held under the same overall ceiling of
-15 blocks an hour. Either can be turned off
+published list, paced 4-10s apart and held under the same overall ceiling of
+100 blocks an hour. Either can be turned off
 without the other. Blocking of any kind runs only while a Facebook or Threads
 tab is open — the block is issued by the site's own code, from a content script
 — and the pace is held by one gate in the service worker covering the whole
-browser, so several open tabs do not block any faster than one. Settings also
+browser, so several open tabs do not block any faster than one. Because the
+work needs a page, the extension keeps one pinned tab of its own on Facebook
+or Threads when accounts are queued and no such tab is open; it opens once,
+stays, and Settings > "Open a tab of its own to get through the queue"
+switches it off. Settings also
 carries a tick box per kind of account (clone, impersonation, scam, harassment,
 spam, other), so a user can narrow what a block is ever spent on.
 
@@ -500,7 +533,7 @@ language; launching Chrome with --lang=vi shows the Vietnamese build of every
 screen.
 
 Our privacy policy mentions a public page that names some REPORTED accounts.
-That page is served by our Firebase project, not by the extension: no code in
+That page is served by our own backend, not by the extension: no code in
 this upload reads it, links to it, or sends anything to it, and nothing about
 a person who uses the extension is ever published on it.
 ```
@@ -565,11 +598,15 @@ in an open tab, so without one the queue simply stalls. The tab is pinned and
 persistent rather than opened and closed per batch, and closing it by hand is
 respected: it reopens once after a minute, then backs off to five, thirty and
 sixty as it is closed again, and after a fifth close it switches the option
-off by itself. It ships **off**: the
-setting is resolved from the manifest, and Chrome only omits `update_url`
-for an unpacked build, so a store install answers "off" and a reviewer never
-sees a tab open. It still costs no permission, and it is disclosed in the
-privacy policy under *Performing a block* because a user can switch it on.
+off by itself. It ships **on** (`experimentalOwnTab: true` in
+`src/common/protocol.js`; `CONFIG_REV` 4 in the service worker moved existing
+installs once), so a reviewer who installs it and leaves no Facebook or
+Threads tab open should expect a pinned tab to appear within a few minutes —
+the published list seeds the queue and the work needs a page. It still costs
+no permission, it is disclosed in the privacy policy under *Performing a
+block*, and the box in Settings switches it off; but it is the one visible
+thing a reviewer will not have asked for, which is why the reviewer notes in
+§4 say it will happen rather than leaving it to be discovered.
 
 The reviewer-notes text in §4 still matters for the hide switch. If it gets
 rejected on these grounds anyway, the cheapest answer is a listing screenshot
@@ -716,8 +753,8 @@ It refuses to write anything unless all of this holds:
   so a `__MSG__` that does not resolve ships an empty listing in that language
 - every path the manifest names is actually in the zip, and every
   `web_accessible_resources` glob matches something
-- no shipped file contains a value read out of `.env`, a token or key shape, a
-  `localhost`/`127.0.0.1` address, or the emulator project id
+- no shipped file contains a value read out of `.env`, a token or key shape, or
+  a `localhost`/`127.0.0.1` address
 - the built-in list URL is `https` and points at production
 
 The zip is deterministic — entries sorted, timestamps fixed — so the same tree

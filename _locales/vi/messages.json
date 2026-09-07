@@ -1326,5 +1326,13 @@
   "report_blockThenReload": {
     "message": "Đang chặn — trang này sẽ tải lại khi xong.",
     "description": "Shown after reporting from the account's own profile page, when a block was also asked for and the page will reload once it lands."
+  },
+  "sw_badObject": {
+    "message": "Một phần của danh sách không khớp với chữ ký nên đã bị bỏ qua.",
+    "description": "Error surfaced in the popup and options page after a manual refresh, when every mirror served a piece of the chunked list whose bytes did not hash to the name the signed root gave it, or that failed to parse. The previously installed list stays in place."
+  },
+  "sw_listTooLarge": {
+    "message": "Danh sách lớn hơn mức phiên bản này có thể chứa.",
+    "description": "Error surfaced in the popup and options page after a manual refresh, when the published list exceeds one of this build's size limits (rows per platform, or a piece bigger than allowed). The previously installed list stays in place."
   }
 }

@@ -603,8 +603,9 @@
         </div>
         <!-- What is already true about this account, said BEFORE the reason
              and the note rather than after the send. Both facts are knowable
-             without a round trip -- membership of the list is in local storage
-             and "did I report this" is in the local report cache -- and
+             without a network round trip -- membership of the list is in the
+             worker's own store and "did I report this" is in the local report
+             cache -- and
              withholding them meant somebody could write out a case against an
              account they had already reported, press Send, be told "Report
              sent", and have the server discard it on the dedup index without
@@ -1016,7 +1017,10 @@
   async function blockLanded(profileId, ms) {
     const deadline = Date.now() + (ms || 20000);
     while (Date.now() < deadline) {
-      const st = await bridge.sw(P.SW.GET_STATE).catch(() => null);
+      // lite: only the done list is wanted. Without it the worker joins names
+      // and tags for every id on screen from its store on each of these
+      // fifty polls, for a page that is about to reload.
+      const st = await bridge.sw(P.SW.GET_STATE, { lite: true }).catch(() => null);
       const done = st && st.done && st.done[PLATFORM];
       if (Array.isArray(done) && done.includes(String(profileId))) return true;
       await new Promise(r => setTimeout(r, 400));
@@ -1042,11 +1046,16 @@
    * popup that cannot name the profile can only offer generic settings -- which
    * is what it used to do.
    */
-  function currentProfileInfo() {
+  async function currentProfileInfo() {
     const ident = identityFromLocation();
     if (!ident) return null;
     const enriched = enrich(ident);
-    const hit = identity.match({ id: enriched.profileId, username: enriched.username });
+    // Answered from this tab's verdict cache when the profile has already
+    // been judged on this page, otherwise by one message to the worker --
+    // which is why this is async and the popup's caller awaits it.
+    const who = { id: enriched.profileId, username: enriched.username };
+    let hit = identity.matchAnyCached([who]);
+    if (hit === undefined) hit = await identity.lookupAny([who]);
     return {
       profileId: enriched.profileId || null,
       username: enriched.username || null,

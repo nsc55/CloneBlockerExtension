@@ -147,7 +147,8 @@
    * In order: what the row itself recorded at the time (log rows snapshot the
    * name, so history does not change under the reader when somebody renames);
    * the name store the worker keeps, fed by every sighting from every tab and
-   * by the published list; and finally the list's own ranked targets.
+   * -- for the ids this page shows -- joined from the published list in its
+   * store on each read; and finally the list's own ranked targets.
    *
    * Returns null rather than a placeholder, so the caller decides what an
    * unknown account is called.
@@ -186,17 +187,18 @@
   /**
    * What kind of account this is, when the published list says.
    *
-   * Two places know: the ranked target record, and the flat `idTags` map that
-   * covers every published id including the ones no target record was kept
-   * for. Nothing is shown when neither knows -- a chip reading "Something
-   * else" on every row of a list published before tags existed would be
-   * inventing a verdict nobody reached.
+   * Two places know: the ranked target record, and the `idTags` map the
+   * worker joins from its store for exactly the ids this page shows -- every
+   * queued, logged and alerted one -- so a listed id no target record was
+   * kept for still gets its chip. Nothing is shown when neither knows -- a
+   * chip reading "Something else" on every row of a list published before
+   * tags existed would be inventing a verdict nobody reached.
    */
   function tagFor(id) {
     const bl = state && state.blocklist;
     if (!bl) return null;
     const t = (bl.targets || []).find(x => String(x.id) === String(id));
-    const tag = (t && t.tag) || (bl.idTags || {})[String(id)] || null;
+    const tag = (t && t.tag) || (state.idTags || {})[String(id)] || null;
     return (globalThis.CB_TAGS || []).includes(tag) ? tag : null;
   }
 
@@ -331,15 +333,22 @@
       let src = bl.source || '';
       try { src = new URL(bl.source).host + new URL(bl.source).pathname; } catch (e) {}
       add(T('activity_syncSource'), src);
-      // The etag is a content hash from the backend, or a CDN's own;
-      // show the one as a time and the other as a short fingerprint.
+      // The signed root's own updatedAt is the freshness value: the raw
+      // mirror and the relay expose no ETag at all, so the etag is only a
+      // fallback for a source that has one and no root -- a content hash
+      // from the backend, or a CDN's own, shown as a time or a fingerprint.
+      const updated = String(bl.updatedAt || '');
       const tag = String(bl.etag || '').replace(/"/g, '');
-      const ver = !tag ? '' : /^\d{4}-\d{2}-\d{2}T/.test(tag)
+      const ver = /^\d{4}-\d{2}-\d{2}T/.test(updated)
+        ? T('activity_listUpdated', updated.slice(0, 16).replace('T', ' '))
+        : !tag ? '' : /^\d{4}-\d{2}-\d{2}T/.test(tag)
         ? T('activity_listUpdated', tag.slice(0, 16).replace('T', ' '))
         : T('activity_listVersion', tag.slice(0, 10));
       add(T('activity_syncLastSynced'), ago(bl.fetchedAt) + (ver ? '  ·  ' + ver : ''));
+      // Tallies the worker keeps with the list; the record carries no entries.
+      const counts = bl.counts || {};
       add(T('activity_syncHideList'),
-        T('activity_hideListValue', bl.ids.length, bl.usernames.length));
+        T('activity_hideListValue', counts.ids || 0, counts.usernames || 0));
       add(T('activity_syncBlockTargets'), bl.targetsAvailable
         ? T('activity_targetsTaken', (bl.targets || []).length, bl.targetsAvailable)
         : String((bl.targets || []).length));

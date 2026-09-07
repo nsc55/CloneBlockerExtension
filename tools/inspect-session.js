@@ -144,14 +144,17 @@ function head(t) { console.log('\n' + t + '\n' + '-'.repeat(t.length)); }
 
     line('bridge handshake', st.handshake ? 'connected' : 'NOT CONNECTED');
     line('signed in as', st.viewerId || 'SIGNED OUT');
+    // The counts are the worker's, from the last slim record the tab was
+    // handed; the tab holds no list of its own any more, only the verdicts
+    // it has asked for, stamped with the generation they were answered under.
     line('blocklist', st.identity
       ? `${st.identity.blockedIds} ids, ${st.identity.blockedUsernames} usernames` : '?');
+    line('verdicts cached', st.identity
+      ? `${st.identity.verdictsCached} (${st.identity.pending} pending, generation ${st.identity.generation})`
+      : '?');
     line('aliases learned', st.identity ? st.identity.aliasesKnown : '?');
     line('hidden on this page', st.dom ? st.dom.hidden : '?');
     line('containers scanned', st.dom ? st.dom.scanned : '?');
-    if (st.unresolved && st.unresolved.length) {
-      line('unresolved usernames', st.unresolved.join(', ').slice(0, 80));
-    }
 
     const cap = st.capability;
     if (!cap) { line('capability', 'not reported yet'); continue; }

@@ -186,8 +186,14 @@ So injecting a `<script>` tag from a content script is the wrong approach — th
 
 The restrictive `connect-src` is also why **the blocklist is fetched in the service
 worker, never from the page**: a MAIN-world fetch to your server would be blocked by the
-page's CSP, and a content-script fetch is bound by facebook.com's origin. Service-worker
-fetches only need `host_permissions` and are exempt from CORS.
+page's CSP, and a content-script fetch is bound by facebook.com's origin. A service-worker
+fetch escapes the page's CSP, but it is still an ordinary cross-origin request: the public
+list bases (raw.githubusercontent.com, cdn.jsdelivr.net, the AWS relay) hold no host
+permission and are read as plain CORS fetches that their permissive headers answer — which
+is also why the worker sends them no custom header at all (no `If-None-Match`, no
+`Authorization`: raw answers the preflight with a 403 and jsDelivr omits
+`allow-headers`). Only the origin, `cloneblocker.tree55.com`, is host-permitted, and a
+host permission is what exempts a fetch from CORS.
 
 ---
 

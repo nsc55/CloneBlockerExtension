@@ -38,7 +38,12 @@
     // ISOLATED/popup/options <-> service worker (chrome.runtime.sendMessage)
     SW: {
       GET_STATE: 'sw:get-state',
+      // The slim record: counts, generation, the ranked slice -- never the
+      // rows. Those live in IndexedDB (CB_LIST_DB) and are asked for by key.
       GET_BLOCKLIST: 'sw:get-blocklist',
+      // Membership for a page's worth of authors: {platform, ids, usernames}
+      // in, positives only out, served from IndexedDB and never the network.
+      BLOCKLIST_LOOKUP: 'sw:blocklist-lookup',
       REFRESH_NOW: 'sw:refresh-now',
       GET_SETTINGS: 'sw:get-settings',
       SET_SETTINGS: 'sw:set-settings',
@@ -68,7 +73,8 @@
       // the same acct_ id the moderation dashboard shows. Read by the popup so
       // a reporter can see, and match, which identity their reports carry.
       GET_REPORTER_ID: 'sw:get-reporter-id',
-      BLOCKLIST_UPDATED: 'sw:blocklist-updated', // SW -> tabs broadcast
+      // SW -> tabs broadcast, payload {count, updatedAt, generation}
+      BLOCKLIST_UPDATED: 'sw:blocklist-updated',
       // SW -> tabs: somebody pressed a button and is watching. The worker
       // loops sleep between claims on timers chosen for unattended
       // sweeping; this cuts the current sleep short so an explicit block
@@ -156,7 +162,10 @@
   // Storage keys (chrome.storage.local unless noted).
   const KEYS = {
     SETTINGS: 'settings',          // sync
-    BLOCKLIST: 'blocklist',        // local: { ids, usernames, etag, fetchedAt, source }
+    // local: {format, updatedAt, generation, counts, count, chunks, targets,
+    // targetsAvailable, etag, fetchedAt, source, verified}; the rows live in
+    // IndexedDB CB_LIST_DB
+    BLOCKLIST: 'blocklist',
     QUEUE: 'platformQueue',        // local: pending real-block targets
     DONE: 'platformDone',          // local: ids already platform-blocked
     STATS: 'stats',                // local
@@ -164,26 +173,43 @@
     REPORTED: 'reportedCache'      // local: { key: {status,count,blocked,at} }
   };
 
+  // The list rows themselves live in IndexedDB, not chrome.storage: one
+  // database in the service worker's origin, which the extension pages share,
+  // so a page can open the same store the worker writes. Named here so the
+  // worker, the pages and the harnesses agree on it;
+  // src/background/list-store.js is the only code that names the stores and
+  // indexes inside it.
+  const LIST_DB = 'cb-blocklist';
+  const LIST_DB_VERSION = 1;
+
   // The blocklist lives at one address, baked in. It used to be a text field,
   // which made the first thing a new user saw a question they had no way to
   // answer. Overridable through storage (the harnesses do exactly that) but
   // no UI writes it any more.
-  // The list is a static file, and that is a deliberate economy.
+  // The list is static files, and that is a deliberate economy.
   //
   // Every install polls it every ten minutes and the content changes rarely.
-  // Served as a static file with an ETag, an unchanged poll costs a few
-  // hundred bytes and no database read at all -- and usually no origin request
-  // either, because Cloudflare answers it from the edge. Against a database
-  // endpoint the same poll was one billed read per install, from something
-  // anybody could hammer, so read cost became a function of user count and of
-  // whoever felt like generating traffic.
+  // Served as static files, an unchanged poll costs a few hundred bytes and no
+  // database read at all -- and usually no origin request either, because a
+  // CDN answers it from the edge. Against a database endpoint the same poll
+  // was one billed read per install, from something anybody could hammer, so
+  // read cost became a function of user count and of whoever felt like
+  // generating traffic. That was the one part of the Firebase design worth
+  // keeping, and it is kept; the rest -- Firestore rules that could not see
+  // who was asking or how often -- is why none of this is Firestore any more.
   //
-  // Both of these now point at our own server. The list is still a static file
-  // with an ETag -- that part of the Firebase design was right and is kept --
-  // but it is written by the backend and served by nginx behind Cloudflare
-  // rather than by Hosting, and reports go to a REST API that can see who is
-  // asking and how often. Firestore rules could not, which is why none of this
-  // is Firestore any more. See docs/BACKEND-PLAN.md.
+  // Two shapes of the same listing are published. The legacy shape is one
+  // signed whole-file blocklist.json (LIST_URL), kept for self-hosters and as
+  // the fallback. The chunked shape (v3) is a small signed root,
+  // manifest.json, naming content-addressed objects under objects/: group
+  // tables and gzip NDJSON chunks, each named by the SHA-256 of its own bytes,
+  // a row's chunk chosen by the high k bits of sha256('<platform>:<id>') (or
+  // ':@<handle>'). Only the root is signed; every object is bound to it by
+  // its hash, and a client downloads only the objects whose names changed.
+  // That is also why the list mirrors are not pinned the way the report hosts
+  // are: a mirror can only ever serve bytes the signed root already names.
+  // Reports go to a REST API that can see who is asking and how often. See
+  // docs/ARCHITECTURE.md.
   const BACKEND = 'https://cloneblocker.tree55.com';
 
   // The block-surviving copies, named up here because they are the DEFAULTS
@@ -203,6 +229,9 @@
   // reach the origin loses nothing but a few minutes of list freshness. The
   // origin stays a fallback for both (see LIST_MIRRORS and the pointer).
   const LIST_URL = MIRROR_RAW + '/blocklist.json';
+  // The chunked list's root lives beside it, objects under objects/. A base
+  // always ends in /blocklist/v3/ -- see V3_MIRRORS for why that matters.
+  const LIST_V3_BASE = MIRROR_RAW + '/blocklist/v3/';
   const API_BASE = RELAY + '/v1';
 
   // Where to look when the backend cannot be reached at its usual address.
@@ -246,6 +275,22 @@
     BACKEND + '/blocklist.json'
   ];
 
+  // The same four copies of the chunked list, as BASES rather than files: the
+  // root is fetched from base + 'manifest.json' and every object from
+  // base + 'objects/<sha256>.json' or '.ndjson.gz', so a base must end in
+  // /blocklist/v3/ and is never appended to a whole-file URL -- the server's
+  // pointer.js filters a pointer's v3Mirrors to exactly that shape for the
+  // same reason. Same order and the same argument as LIST_MIRRORS: the shared
+  // copies first, the origin last because it is the one an ISP blocks. The
+  // base that served the verifying root is asked first for the objects it
+  // names; the rest follow in this order.
+  const V3_MIRRORS = [
+    LIST_V3_BASE,
+    MIRROR_JSDELIVR + '/blocklist/v3/',
+    RELAY + '/blocklist/v3/',
+    BACKEND + '/blocklist/v3/'
+  ];
+
   // The hostnames this build will talk to, whatever a signed pointer says.
   //
   // This is the control that survives the signing key leaking. A stolen key
@@ -253,6 +298,13 @@
   // this array ships inside the extension and changing it needs a store
   // review. So the worst a compromised key achieves is choosing among hosts
   // the build already trusted.
+  //
+  // Only the REPORT hosts are pinned. A pointer's listMirrors and v3Mirrors
+  // are governed alike and are not: the whole-file list is signed, and the
+  // chunked list's root is signed with every object hash-bound to it, so a
+  // mirror -- stale, hostile, or somebody else's entirely -- can at worst
+  // fail to verify. Reports carry what a person typed to whoever receives
+  // them, which is why those hosts, and only those, are pinned.
   const POINTER_HOSTS = [
     'cloneblocker.tree55.com',
     'h0w1lwun39.execute-api.ap-southeast-1.amazonaws.com'
@@ -270,11 +322,16 @@
   const DEFAULT_SETTINGS = {
     listUrl: LIST_URL,
     listAuthHeader: '',      // optional "Authorization: ..." value
-    // Ten minutes, not an hour. The list is a static file on a CDN and the
-    // poll is conditional, so an unchanged list answers 304 and costs a few
-    // hundred bytes and no database read at all -- which is what makes a
-    // shorter interval affordable. What it buys is the gap between a moderator
-    // approving a clone and every installation acting on it.
+    // Ten minutes, not an hour. The list is static files on a CDN, so an
+    // unchanged poll is cheap. For the chunked list it is one GET of the
+    // ~740-byte signed root, recognised as unchanged by its signed updatedAt
+    // (the raw mirror and the relay expose no ETag over CORS, so freshness is
+    // read from the document rather than the headers), and a changed poll
+    // downloads only the objects whose names changed. The whole-file list
+    // still answers a conditional poll with a 304. Either way no database
+    // read at all, which is what makes a shorter interval affordable. What it
+    // buys is the gap between a moderator approving a clone and every
+    // installation acting on it.
     refreshMinutes: 10,
 
     // Reporting. apiBase is derived from listUrl when left blank, so the common
@@ -464,6 +521,10 @@
   globalThis.CB_POINTER_URLS = POINTER_URLS;
   globalThis.CB_POINTER_HOSTS = POINTER_HOSTS;
   globalThis.CB_LIST_MIRRORS = LIST_MIRRORS;
+  globalThis.CB_V3_MIRRORS = V3_MIRRORS;
+  globalThis.CB_LIST_V3_BASE = LIST_V3_BASE;
+  globalThis.CB_LIST_DB = LIST_DB;
+  globalThis.CB_LIST_DB_VERSION = LIST_DB_VERSION;
   globalThis.CB_POINTER_KEY = POINTER_KEY;
   globalThis.CB_BACKEND = BACKEND;
   globalThis.CB_LIST_URL = LIST_URL;

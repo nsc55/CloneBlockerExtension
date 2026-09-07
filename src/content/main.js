@@ -4,8 +4,9 @@
  * Boot order matters here:
  *   1. Start the bridge handshake immediately -- the MAIN world may already be
  *      waiting, and its module hook is only useful if we can reach it.
- *   2. Load settings + blocklist from the service worker and start hiding.
- *      hiding must not wait on anything network-bound.
+ *   2. Load settings + list status from the service worker and start hiding.
+ *      hiding must not wait on anything network-bound. The list itself stays
+ *      in the worker; this tab asks it about the authors it actually sees.
  *   3. Only once everything is settled, consider the opt-in platform-block
  *      worker.
  */
@@ -33,13 +34,13 @@
 
     await identity.loadAliases();
 
+    // The slim record: counts and the generation, never the entries. Nothing
+    // is seeded here any more -- nothing has been seen yet, and only ids seen
+    // on a page are warm (see maybeSeedQueue).
     const bl = await bridge.sw(P.SW.GET_BLOCKLIST);
     if (bl && bl.ok && bl.blocklist) {
-      identity.setBlocklist(bl.blocklist);
-      log('blocklist loaded', identity.stats());
-      // Numeric ids are actionable immediately; nothing has to be discovered
-      // for them first.
-      maybeSeedQueue();
+      identity.setListStatus(bl.blocklist);
+      log('list status', identity.stats());
     } else {
       log('no blocklist available yet', bl && bl.error);
     }
@@ -58,21 +59,27 @@
     bridge.on(P.HELLO_ACK, () => pushMainConfig());
     if (bridge.isHandshakeDone()) pushMainConfig();
 
-    // Keep the id<->username map fed from every Relay store sweep.
+    // Keep the id<->username map fed from every Relay store sweep. Async,
+    // because which of the new pairs touch the list is the worker's answer
+    // now; the bridge's emit() only catches synchronous throws, so the
+    // closure owns its rejections.
     bridge.on(P.STORE_SNAPSHOT, (payload) => {
-      const res = identity.learnMany(payload && payload.users) || { learned: 0, relevant: 0 };
-      if (res.learned) {
-        log('learned', res.learned, 'pairs,', res.relevant, 'blocklist-relevant');
-        if (res.relevant) {
-          // One of these pairs bridges a blocklist entry to something on the
-          // page. Verdicts cached before we knew that are now wrong, and their
-          // signatures have not changed, so a plain re-scan would skip them.
-          dom.invalidateDecisions();
+      (async () => {
+        const users = Array.isArray(payload && payload.users) ? payload.users.slice(0, 500) : [];
+        const res = await identity.learnMany(users) || { learned: 0, relevant: 0 };
+        if (res.learned) {
+          log('learned', res.learned, 'pairs,', res.relevant, 'blocklist-relevant');
+          if (res.relevant) {
+            // One of these pairs bridges a blocklist entry to something on the
+            // page. Verdicts cached before we knew that are now wrong, and their
+            // signatures have not changed, so a plain re-scan would skip them.
+            dom.invalidateDecisions();
+          }
+          dom.scan();
         }
-        dom.scan();
-      }
-      // Report resolved ids for blocklist usernames back to the worker queue.
-      maybeSeedQueue();
+        // Report resolved ids for listed profiles back to the worker queue.
+        maybeSeedQueue();
+      })().catch((e) => log('store snapshot failed', e && e.message));
     });
 
     // Capture mode: the MAIN world saw a real block request go by.
@@ -144,16 +151,17 @@
       wakeNow();
     });
 
-    // The service worker refreshed the list from your server.
-    bridge.onSw(P.SW.BLOCKLIST_UPDATED, async () => {
-      const fresh = await bridge.sw(P.SW.GET_BLOCKLIST);
-      if (fresh && fresh.ok && fresh.blocklist) {
-        identity.setBlocklist(fresh.blocklist);
-        dom.rescanAll();
-        lastSeeded = '';   // a replaced list must re-seed even if it is the same size
-        maybeSeedQueue();
-        log('blocklist refreshed', identity.stats());
-      }
+    // The service worker refreshed the list from your server. The broadcast
+    // carries the new generation, so a tab that already has it does nothing
+    // and one that does not empties its verdicts and asks again about
+    // everything on screen -- no round trip back to the worker first.
+    bridge.onSw(P.SW.BLOCKLIST_UPDATED, (payload) => {
+      if (!payload || payload.generation === identity.stats().generation) return;
+      identity.setListStatus(payload);
+      dom.rescanAll();
+      sentIds.clear();   // a replaced list must re-seed, even ids sent under the old one
+      maybeSeedQueue();
+      log('blocklist refreshed', identity.stats());
     });
 
     // React to settings edits made in the options page.
@@ -233,20 +241,28 @@
     });
   }
 
-  /** Tell the service worker which blocked profiles now have a numeric id, so
-   *  it can queue them for a real platform block.
+  /** Tell the service worker which listed profiles this tab has seen and has
+   *  a numeric id for, so it can queue them for a real platform block.
    *
-   *  Called after every store sweep, so it only forwards when the resolvable
-   *  set has actually grown -- otherwise each open tab would ship the whole id
-   *  list across the message channel every 15 seconds for no reason. */
-  let lastSeeded = '';
+   *  Only ids positively matched on THIS page are ever sent. The list used to
+   *  be seeded whole at boot -- every numeric id on it, seen or not -- and
+   *  that ended with the list moving out of the tab: an id nobody has
+   *  scrolled past is not warm, and those reach the queue only as cold
+   *  targets from the ranked slice the worker seeds itself.
+   *
+   *  Called after every store sweep and every list refresh, so it forwards
+   *  only what it has not sent before -- otherwise each open tab would ship
+   *  the same ids across the message channel every 15 seconds for no reason.
+   *  A set of sent ids rather than the old length-plus-last-id signature,
+   *  which could not see a changed set of equal size. */
+  const sentIds = new Set();
   async function maybeSeedQueue() {
     if (!settings.platformBlockEnabled) return;
-    const ids = identity.blockableIds();
+    const ids = identity.blockedIdsSeen().filter(id => !sentIds.has(id));
     if (!ids.length) return;
-    const sig = ids.length + ':' + ids[ids.length - 1];
-    if (sig === lastSeeded) return;
-    lastSeeded = sig;
+    // Marked before the round trip so an overlapping call does not send the
+    // same ids twice; unmarked again if the worker did not take them.
+    for (const id of ids) sentIds.add(id);
     // The alias map is how these ids were resolved in the first place, so the
     // username is already in hand. Sent along because nothing downstream can
     // work it out later: the worker only ever sees numbers, and the Activity
@@ -257,7 +273,7 @@
       if (u) names[id] = u;
     }
 
-    await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
+    const res = await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
       platform: bridge.state.platform,
       ids,
       names,
@@ -266,6 +282,7 @@
       // normally rather than rationed like a target the server nominated.
       warm: true
     });
+    if (!(res && res.ok)) for (const id of ids) sentIds.delete(id);
   }
 
   // -- platform block worker --------------------------------------------------
@@ -462,21 +479,31 @@
       if (!msg || msg.type !== 'tab:status') return;
       // Ask for a fresh capability report rather than serving the last
       // snapshot, which may predate the page finishing its bundle load.
-      const base = {
-        ok: true,
-        platform: bridge.state.platform,
-        viewerId: bridge.state.viewerId,
-        handshake: bridge.isHandshakeDone(),
-        identity: identity.stats(),
-        dom: dom.stats(),
-        // Who this page is about, so the popup can offer an action for it
-        // rather than a page of switches.
-        profile: report ? report.currentProfileInfo() : null,
-        unresolved: identity.unresolvedUsernames().slice(0, 25)
-      };
-      bridge.request(P.PROBE_CAPABILITY, {}, 5000)
-        .then((cap) => respond(Object.assign(base, { capability: cap || bridge.state.capability })))
-        .catch(() => respond(Object.assign(base, { capability: bridge.state.capability })));
+      //
+      // Async, because whether this page's profile is listed is a question
+      // for the worker now rather than a Set in this tab. The await matters:
+      // without it `profile` would be a Promise, structured clone would refuse
+      // it, and the popup would fall through to "Page not ready".
+      (async () => {
+        const profile = report ? await report.currentProfileInfo() : null;
+        const base = {
+          ok: true,
+          platform: bridge.state.platform,
+          viewerId: bridge.state.viewerId,
+          handshake: bridge.isHandshakeDone(),
+          identity: identity.stats(),
+          dom: dom.stats(),
+          // Who this page is about, so the popup can offer an action for it
+          // rather than a page of switches.
+          profile
+        };
+        try {
+          const cap = await bridge.request(P.PROBE_CAPABILITY, {}, 5000);
+          respond(Object.assign(base, { capability: cap || bridge.state.capability }));
+        } catch (e) {
+          respond(Object.assign(base, { capability: bridge.state.capability }));
+        }
+      })().catch((e) => respond({ ok: false, error: String((e && e.message) || e) }));
       return true;
     });
   } catch (e) { /* ignore */ }

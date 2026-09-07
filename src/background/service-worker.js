@@ -1,19 +1,25 @@
 /**
  * MV3 service worker.
  *
- * Owns three things the content scripts cannot:
+ * Owns four things the content scripts cannot:
  *
  *  1. The server fetch. A content-script fetch is subject to facebook.com's
- *     origin and CSP; a service-worker fetch only needs host permission and is
- *     exempt from CORS. So the blocklist is always fetched here.
- *  2. The block queue and rate limiter. Several Facebook tabs may be open at
+ *     origin and CSP; a service-worker fetch is not. The three public list
+ *     bases (raw GitHub, jsDelivr, the relay) are ordinary CORS fetches that
+ *     those hosts answer permissively; only *.tree55.com is host-permitted.
+ *     So the blocklist is always fetched here.
+ *  2. The IndexedDB list database (list-store.js): every listed id and handle
+ *     as one row, filled incrementally by the walk in list-sync.js and read by
+ *     batched lookups. Content scripts and pages never hold the list; they ask
+ *     about the few ids in front of them.
+ *  3. The block queue and rate limiter. Several Facebook tabs may be open at
  *     once; centralising the queue is what stops them double-blocking the same
  *     profile or blowing through the hourly cap in parallel.
- *  3. Scheduled refresh via chrome.alarms.
+ *  4. Scheduled refresh via chrome.alarms.
  *
  * MV3 service workers are killed aggressively and restarted on demand, so
  * nothing here may live in a module-scope variable across calls. Every piece of
- * state round-trips through chrome.storage.
+ * state round-trips through chrome.storage or the list database.
  */
 
 // Executing these publishes CB_T and then CB_PROTOCOL / CB_KEYS /
@@ -22,6 +28,17 @@
 // it and a missing CB_T would leave them in English here alone.
 import '../common/i18n.js';
 import '../common/protocol.js';
+// The signed-envelope check and the hex helpers, shared with list-sync.js:
+// the pointer, the legacy list and the v3 root are all verified by the one
+// function against the one compiled-in key.
+import { verifyEnvelope, isEnvelope, hex, sha256Hex } from './envelope.js';
+// The list database and the walk that fills it. The worker owns both and
+// touches the database only through ListStore; the walk takes that store by
+// argument rather than importing it, which is what lets the Node harnesses
+// hand both a Map-backed store (CB_LIST_STORE_FACTORY) instead of an
+// IndexedDB.
+import * as ListStore from './list-store.js';
+import * as ListSync from './list-sync.js';
 
 const P = globalThis.CB_PROTOCOL;
 // Only the errors that surface in the popup or on the Activity page go through
@@ -102,7 +119,17 @@ const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
 // whether or not the wipe above did. Which is why the wipe is now gated to
 // rev < 3 rather than to the whole migration: re-wiping a rev-3 install on the
 // way to rev 4 would throw away state it was right to keep.
-const CONFIG_REV = 4;
+//
+// rev 5 (1.1.0): the cached list moves out of chrome.storage.local and into
+// the IndexedDB list database. The old `blocklist` record carried the whole
+// id and username arrays, and no reader understands those any more -- the
+// pages read a slim record of counts, and every membership question goes to
+// the database -- so a stale record would TypeError the popup before the
+// first v3 refresh landed. Drop it, and drop any database a development
+// build may have left under the same name, so the first refresh after the
+// upgrade is a clean cold sync. This is not a slate: WIPE_KEEP still names
+// what the rev-3 wipe preserves, and nothing else is touched.
+const CONFIG_REV = 5;
 const WIPE_KEEP = ['reporterSecret', 'reportOutbox', 'platformDone', 'ownWorkTab', 'welcomedAt'];
 
 async function migrateConfig() {
@@ -129,6 +156,17 @@ async function migrateConfig() {
     await chrome.storage.sync.set({
       [KEYS.SETTINGS]: Object.assign({}, stored, { experimentalOwnTab: true })
     });
+  }
+
+  // rev 5: the list leaves chrome.storage.local. The record is gone until the
+  // next refresh rewrites it in its slim shape, and the database is rebuilt
+  // from the signed root by the first walk. A database that cannot be deleted
+  // right now (a page of ours still holding it open) is not worth wedging the
+  // migration over: the walk plans against whatever it finds and replaces
+  // what does not match the root, so the stamp lands either way.
+  if (rev < 5) {
+    await chrome.storage.local.remove([KEYS.BLOCKLIST]);
+    try { await ListStore.destroy(); } catch (e) { /* rebuilt by the first walk */ }
   }
 
   // Stamped last: a worker that dies between the writes above simply runs this
@@ -315,13 +353,22 @@ const ID_RE = /^\d{4,24}$/;
 // Where the list comes from
 // ---------------------------------------------------------------------------
 //
-// The blocklist is a static JSON file rather than anything served from a
-// server: one public-read doc whose `json` field holds the whole published
-// payload. Three things change when the URL points there, and only there:
-// no ranking hints are appended to the URL (nothing about this browser is
-// sent anywhere), the ranked slice is computed locally from published
-// per-target metadata, and reports are written as create-only documents.
-// Every legacy shape keeps working for self-hosted servers and static files.
+// The blocklist is a set of static files, never anything computed per
+// request. The current shape is the chunked v3 listing (list-sync.js): one
+// small signed ROOT, blocklist/v3/manifest.json, names content-addressed
+// objects -- group tables, gzip NDJSON chunks of rows, and an extras object
+// carrying the ranked-target metadata -- each fetched by the SHA-256 of its
+// bytes and verified against the root before it is believed. The whole-file
+// blocklist.json is the legacy shape, kept for self-hosted lists and as the
+// fallback when no v3 root verifies anywhere.
+//
+// Two privacy facts follow, and both are structural rather than a policy.
+// Nothing about this browser is sent: no ranking hints ride on any URL, the
+// ranked slice is computed locally from the published per-target metadata,
+// and reports go to a separate, pinned host. And WHICH objects are fetched
+// depends only on what changed server-side between two signed roots, never
+// on what this browser looked up: a lookup is a local database read, and no
+// page, profile or verdict ever causes a fetch.
 
 const normUsername = (u) => String(u || '').trim().toLowerCase().replace(/^@/, '');
 
@@ -345,7 +392,7 @@ const normUsername = (u) => String(u || '').trim().toLowerCase().replace(/^@/, '
  * understood that and only intake validation did not: shared/logic.js routes a
  * non-numeric target into the published usernames array rather than ids,
  * the transparency page names it, and this extension's own blocklist index
- * matches on it (identity.js setBlocklist). What was missing was only ever
+ * matches on it (the worker's sw:blocklist-lookup, which identity.js batches). What was missing was only ever
  * something non-empty to put in the field.
  *
  * Prefixed with '@' rather than sent bare, because the server decides which
@@ -378,8 +425,6 @@ function targetIdFor(payload) {
   const user = normUsername(payload && payload.username);
   return user ? ('@' + user).slice(0, 64) : '';
 }
-
-const hex = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 
 // -- the reporter pseudonym ---------------------------------------------------
 //
@@ -633,11 +678,11 @@ async function remainingBudget(settings) {
 /**
  * The tag of a target, tolerating everything that might not have one.
  *
- * A list published before tags existed, an id the published `idTags` map does
- * not name, a tag from a future release this build has never heard of: all of
- * them land on 'other'. That is the bucket every install blocks by default and
- * the first one an owner narrowing their tags would drop -- the right way
- * round for something nobody has actually voted on.
+ * A list published before tags existed, a listed row that carries no tag, a
+ * tag from a future release this build has never heard of: all of them land
+ * on 'other'. That is the bucket every install blocks by default and the
+ * first one an owner narrowing their tags would drop -- the right way round
+ * for something nobody has actually voted on.
  */
 function tagOf(value) {
   return TAGS.includes(value) ? value : 'other';
@@ -659,20 +704,34 @@ function blockTagsOf(settings) {
 /**
  * Drop ids whose kind this user does not want blocked.
  *
- * `idTags` is the published tag of every listed id, cached with the list
- * exactly so this decision can be made without the whole target record.
- * Entries may be bare ids or {id, rank} objects, as enqueue() accepts.
+ * The tag rides on the listed row itself (row.t in the list database), so
+ * this decision is a batched lookup -- platform-scoped, with the '*' fallback
+ * for manual and legacy rows -- and never a fetch or the whole target record.
+ * An id the list does not name, or names without a tag, is 'other', as
+ * tagOf() has always ruled. Entries may be bare ids or {id, rank} objects, as
+ * enqueue() accepts.
  */
-async function filterByBlockTags(ids, settings) {
+async function filterByBlockTags(platform, ids, settings) {
   const allowed = new Set(blockTagsOf(settings));
-  // Nothing is excluded -- the shipped default -- so skip the storage read.
+  // Nothing is excluded -- the shipped default -- so skip the database read.
   if (TAGS.every(t => allowed.has(t))) return ids || [];
-  const bl = await getLocal(KEYS.BLOCKLIST, null);
-  const idTags = (bl && bl.idTags) || {};
-  return (ids || []).filter((raw) => {
-    const id = String(raw && typeof raw === 'object' ? raw.id : raw);
-    return allowed.has(tagOf(idTags[id]));
-  });
+  const idOf = (raw) => String(raw && typeof raw === 'object' ? raw.id : raw);
+  const wanted = Array.from(new Set((ids || []).map(idOf).filter(id => ID_RE.test(id))));
+  const tags = {};
+  // The lookup transaction is sized for one page of ids; a longer sweep is
+  // several of them. A caller that named no platform is answered from the
+  // '*' rows alone rather than refused.
+  const p = listPlatform(platform) || '*';
+  for (let i = 0; i < wanted.length; i += 500) {
+    const got = await ListStore.lookup({ platform: p, ids: wanted.slice(i, i + 500), usernames: [] });
+    Object.assign(tags, (got && got.ids) || {});
+  }
+  return (ids || []).filter(raw => allowed.has(tagOf((tags[idOf(raw)] || {}).t)));
+}
+
+/** The platform a list question is scoped to, or null when the caller sent none. */
+function listPlatform(platform) {
+  return (platform === 'facebook' || platform === 'threads') ? platform : null;
 }
 
 /**
@@ -706,7 +765,37 @@ async function seedServerTargets(record) {
   return { ok: true, added };
 }
 
-async function refreshBlocklist(force) {
+/**
+ * One walk at a time, per worker lifetime.
+ *
+ * The alarm, onStartup and a REFRESH_NOW from the popup can all land within
+ * the same second, and a v3 walk is long-lived -- seconds normally, minutes
+ * on a cold sync -- so two of them interleaving would fetch the same objects
+ * twice and race their per-bucket commits. The memo hands a second caller the
+ * first caller's promise. It is module scope, which is allowed here for the
+ * same reason `opChain` is: it describes THIS worker's in-flight work, and a
+ * worker that dies takes the work with it. Every step of the walk is
+ * idempotent, so the next wakeup simply continues from the committed state.
+ */
+// One walk at a time. An ordinary poll that arrives while a walk is in
+// flight simply shares its result: the alarm, onStartup and a tab's nudge
+// all want the same thing, and two walks would fetch the same objects twice.
+// A FORCED refresh is different. It is a person pressing Refresh now (or
+// onInstalled, or a harness that has just rewritten the settings): it must
+// read the settings as they are NOW and re-run the tail whatever the in-flight
+// walk concludes, so it queues behind the current walk rather than adopting
+// it -- adopting it once handed a fresh listUrl the previous URL's answer.
+let refreshInflight = null;
+function refreshBlocklist(force) {
+  if (!force && refreshInflight) return refreshInflight;
+  const after = refreshInflight ? refreshInflight.catch(() => {}) : Promise.resolve();
+  const run = after.then(() => doRefresh(force));
+  refreshInflight = run;
+  run.finally(() => { if (refreshInflight === run) refreshInflight = null; }).catch(() => {});
+  return run;
+}
+
+async function doRefresh(force) {
   const settings = await getSettings();
   if (!settings.listUrl) {
     return { ok: false, error: T('sw_noListUrl') };
@@ -725,10 +814,17 @@ async function refreshBlocklist(force) {
     };
   }
 
+  // Two records of what is held. The slim chrome.storage.local record carries
+  // what the pages print (etag, source, fetchedAt, counts, the ranked slice);
+  // the database's root document is the last FULLY COMMITTED list, and it is
+  // what anti-rollback and the unchanged short-circuits compare against -- a
+  // walk killed halfway leaves the slim record untouched, so comparing
+  // against that would let a resumed walk mistake itself for finished.
   const prev = await getLocal(KEYS.BLOCKLIST, null);
+  const prevRoot = await ListStore.getMeta('root');
   const headers = { accept: 'application/json' };
   if (settings.listAuthHeader) headers.authorization = settings.listAuthHeader;
-  // Conditional request keeps refreshes cheap on an unchanged list.
+  // Conditional request keeps legacy refreshes cheap on an unchanged list.
   if (!force && prev && prev.etag) headers['if-none-match'] = prev.etag;
 
   // The URL carries nothing about this browser -- no budget, no region, no
@@ -753,6 +849,22 @@ async function refreshBlocklist(force) {
   refreshPointerIfStale().catch(() => {});
 
   const pointerRec = await getLocal('backendHosts', null);
+
+  // THE CHUNKED LIST FIRST. Which format to read is decided by the primary
+  // listUrl alone, inside syncV3: the shipped default reads the v3 root from
+  // the pointer's v3Mirrors and the compiled V3 bases; a listUrl ending in
+  // /blocklist/v3/manifest.json is a self-hosted v3 root, read first and with
+  // the unsigned and rollback exemptions a self-hosted primary has always
+  // had; any other listUrl is a legacy whole-file list and v3 is never
+  // attempted. The walk answers null only when NO base served a verifying
+  // root, and then the legacy loop below runs exactly as it always has,
+  // against the mirrors' whole-file blocklist.json. Anything else -- a
+  // committed walk, an unchanged root, a stale mirror, a failed walk -- is
+  // final, and the legacy file is not consulted: a list that verified is not
+  // improved on by a second copy of it.
+  const v3 = await ListSync.syncV3({ store: ListStore, settings, force, pointerRec, prevRoot, bump: bumpStat, T });
+  if (v3) return finishV3(v3, settings, prev);
+
   const mirrors = (pointerRec && Array.isArray(pointerRec.listMirrors))
     ? pointerRec.listMirrors : [];
   // Compiled mirrors after the pointer's: the pointer can name fresher ones
@@ -775,11 +887,11 @@ async function refreshBlocklist(force) {
   // signature or nothing.
   const selfHostedPrimary = settings.listUrl !== (globalThis.CB_LIST_URL || '');
 
-  // The list is a static file with a real ETag, so an unchanged poll is an
-  // If-None-Match away from a 304 with no body -- a few hundred bytes, no
-  // database read, and at this point usually no origin request at all because
-  // Cloudflare answers it at the edge. That economy is what makes a ten-minute
-  // poll affordable across every installation.
+  // THE LEGACY LOOP: the whole-file blocklist.json, reached only when the
+  // primary is a legacy URL or no v3 root verified anywhere. Its economy is
+  // the ETag: a self-hosted list with a real one answers an If-None-Match
+  // with a 304 and no body. (The v3 phase above needs none of that -- one
+  // root GET of a few hundred bytes, and updatedAt equality is its 304.)
   let res = null, payload = null, source = null, verified = false;
   let lastError = null;
   for (const url of candidates) {
@@ -854,10 +966,15 @@ async function refreshBlocklist(force) {
     // runs, restored from backup, is a legitimate rollback. The shipped
     // default is a public file an attacker could pin to an old signed copy, so
     // it gets the same anti-replay guard as any mirror.
-    if (!(isPrimary && selfHostedPrimary) && prev && prev.updatedAt && body && body.updatedAt &&
-        Date.parse(body.updatedAt) < Date.parse(prev.updatedAt)) {
-      const touched = Object.assign({}, prev, { fetchedAt: Date.now() });
-      await setLocal(KEYS.BLOCKLIST, touched);
+    //
+    // Compared against the database's committed root, not the slim record:
+    // the root is the last list fully installed, whichever format it came
+    // in, so a v3 root held there guards this fallback against replay too --
+    // and a whole-file copy older than the chunked list already installed is
+    // exactly such a replay, not an upgrade.
+    if (!(isPrimary && selfHostedPrimary) && prevRoot && prevRoot.updatedAt && body && body.updatedAt &&
+        Date.parse(body.updatedAt) < Date.parse(prevRoot.updatedAt)) {
+      const touched = await touchSlim(prev, settings, {});
       return { ok: true, unchanged: true, stale: url, blocklist: touched };
     }
 
@@ -869,21 +986,20 @@ async function refreshBlocklist(force) {
     return { ok: false, error: lastError || T('sw_fetchFailed', 'unreachable') };
   }
 
-  // The list did not change -- so skip the whole reprocess-and-broadcast tail,
+  // The list did not change -- so skip the whole import-and-broadcast tail,
   // the same economy the HTTP 304 gives.
   //
   // That fast path relies on an ETag the host echoes back on a conditional
-  // poll. The default primary is now raw.githubusercontent.com, fetched over
-  // CORS without a host permission, and GitHub does not expose ETag to script
-  // there -- so no conditional request is possible and every scheduled poll
-  // gets a full 200. The signed payload carries its own version instead: an
-  // unchanged list has the same updatedAt, so treat that as a 304 would be.
-  // A forced refresh reprocesses regardless, exactly as it did before, since a
-  // 304 could never happen on force either.
-  if (!force && prev && prev.updatedAt && payload && payload.updatedAt &&
-      payload.updatedAt === prev.updatedAt) {
-    const touched = Object.assign({}, prev, { fetchedAt: Date.now(), source });
-    await setLocal(KEYS.BLOCKLIST, touched);
+  // poll, and the public mirrors expose none to script -- so every scheduled
+  // poll of a mirror gets a full 200, and the signed payload's own version is
+  // the tell instead: an unchanged list has the same updatedAt as the root
+  // the database holds, so treat that as a 304 would be. (The v3 phase has
+  // only this test; its root is a few hundred bytes and never needed an
+  // ETag.) A forced refresh reprocesses regardless, exactly as it did before,
+  // since a 304 could never happen on force either.
+  if (!force && prevRoot && prevRoot.updatedAt && payload && payload.updatedAt &&
+      payload.updatedAt === prevRoot.updatedAt) {
+    const touched = await touchSlim(prev, settings, { source });
     return { ok: true, unchanged: true, blocklist: touched };
   }
 
@@ -896,30 +1012,103 @@ async function refreshBlocklist(force) {
   // A response that is not a recognisable list shape is a different matter:
   // that is an error page or a misconfigured URL, and accepting it would clear
   // everyone's blocklist.
-  const looksLikeList = payload && (Array.isArray(payload) ||
+  //
+  // A v3 root is not a whole-file list either, whatever keys it happens to
+  // share: a mirror that started serving the root at the legacy address, or a
+  // listUrl that reaches a manifest by some path syncV3 did not recognise,
+  // must earn "not a blocklist" rather than an empty list installed.
+  const looksLikeList = payload && !(payload.v === 3 && payload.platforms) && (Array.isArray(payload) ||
     (typeof payload === 'object' && ['ids', 'usernames', 'blocked', 'entries', 'list', 'users', 'data']
       .some(k => k in payload)));
   if (!looksLikeList) {
     return { ok: false, error: T('sw_notABlocklist') };
   }
 
-  // Ranked cold targets, if the list carries any and the user allows them.
-  // The list carries per-target METADATA (day buckets, region tallies) rather
-  // than a ranking, and the ranking happens right here, with context that
-  // never leaves this machine.
-  let targets = [], targetsAvailable = Number(payload.targetsAvailable) || 0;
-  if (blockModes(settings).fromList && Array.isArray(payload.targets)) {
-    const raw = payload.targets.filter(t => t && ID_RE.test(String(t.id)));
-    // Ranking is about how urgent a target is, not what kind of account it is,
-    // so the tag is carried alongside the ranked entry rather than through it.
-    // The queue, the seeding filter and the activity page all read it here.
+  // Into the database, wholesale. A legacy source is one file, so the store
+  // is cleared and refilled from it -- ids, usernames, the published names
+  // and tags all become rows -- and the root document is stamped
+  // format:'legacy' so the next v3 walk knows to drop those rows rather than
+  // keep them beside its own. Then the same tail every refresh ends in.
+  const etag = res.headers.get('etag') || null;
+  await ListSync.importLegacy(norm, payload, { store: ListStore, source, verified, etag });
+  return finishRefresh(settings, { payload, docIdOverrides: norm.docIdOverrides });
+}
+
+/**
+ * What the v3 walk handed back, turned into the refresh's answer.
+ *
+ * syncV3 answers null when no base served a verifying root, and the caller
+ * falls through to the legacy loop before this is reached. Otherwise:
+ *
+ *   { ok: false, error, ... }               the walk failed; the committed
+ *                                           state is untouched, so the answer
+ *                                           is passed up as it stands
+ *   { ok: true, unchanged: true, stale? }   the root held is the root served,
+ *                                           or a mirror served an older one --
+ *                                           the slim record's fetchedAt is
+ *                                           touched, as a 304 would
+ *   anything else                           the root is committed in the
+ *                                           database; run the tail
+ *
+ * On a forced refresh the walk fetches nothing that already matches and
+ * never answers "unchanged", so the tail re-ranks, re-prunes, re-seeds and
+ * re-broadcasts from the database alone -- what REFRESH_NOW has always meant.
+ */
+async function finishV3(v3, settings, prev) {
+  if (v3.ok === false) return v3;
+  if (v3.unchanged) {
+    const touched = await touchSlim(prev, settings, v3.source ? { source: v3.source } : {});
+    const out = { ok: true, unchanged: true, blocklist: touched };
+    if (v3.stale) out.stale = v3.stale;
+    return out;
+  }
+  return finishRefresh(settings, { changed: v3.changed });
+}
+
+/**
+ * An unchanged list: stamp the slim record's fetchedAt (and the source that
+ * answered) so the popup's "checked N minutes ago" stays honest, without
+ * rerunning the tail. A MISSING slim record beside a committed root means the
+ * previous worker died between the commit and the tail, so the tail runs
+ * now: it rebuilds the record from the database and completes the fan-out
+ * that never happened.
+ */
+async function touchSlim(prev, settings, extra) {
+  if (prev) {
+    const touched = Object.assign({}, prev, { fetchedAt: Date.now() }, extra || {});
+    await setLocal(KEYS.BLOCKLIST, touched);
+    return touched;
+  }
+  const done = await finishRefresh(settings, extra || {});
+  return done.blocklist || null;
+}
+
+/**
+ * Rank the published target metadata into this browser's cold-work slice.
+ *
+ * The list carries per-target METADATA (day buckets, region names) rather
+ * than a ranking, and the ranking happens right here, with context that
+ * never leaves this machine. Ranking is about how urgent a target is, not
+ * what kind of account it is, so the tag is carried alongside the ranked
+ * entry rather than through it: the queue, the seeding filter and the
+ * activity page all read it there. A list published without ranking metadata
+ * is taken in its published order, as it always was.
+ *
+ * `available` is the list's own count of eligible ids -- larger than the
+ * capped metadata it publishes -- and wins over the ranked length when the
+ * list states it.
+ */
+async function rankTargetsFrom(rawTargets, available, rankWeights, updatedAt, settings) {
+  let targets = [], targetsAvailable = Number(available) || 0;
+  if (blockModes(settings).fromList && Array.isArray(rawTargets)) {
+    const raw = rawTargets.filter(t => t && ID_RE.test(String(t.id)));
     const tagById = new Map(raw.map(t => [String(t.id), tagOf(t.tag)]));
     const withTag = (t) => Object.assign({}, t, { tag: tagById.get(String(t.id)) || 'other' });
     if (raw.some(t => t.days || t.regions || t.langs || t.recent != null || t.confidence != null)) {
       const budget = Math.max(1, Math.min(await remainingBudget(settings), 200));
-      const ranked = rankPublishedTargets(raw, settings, payload.rankWeights, payload.updatedAt);
+      const ranked = rankPublishedTargets(raw, settings, rankWeights, updatedAt);
       targets = ranked.slice(0, budget).map(withTag);
-      targetsAvailable = ranked.length;
+      targetsAvailable = Number(available) || ranked.length;
     } else {
       targets = raw.map(t => ({ id: String(t.id), platform: String(t.platform || ''),
                                 rank: Number(t.rank) || 0, why: t.why || null,
@@ -928,61 +1117,78 @@ async function refreshBlocklist(force) {
                                 tag: tagOf(t.tag) }));
     }
   }
+  return { targets, targetsAvailable };
+}
 
-  // The tag of every published id, kept with the list.
-  //
-  // Warm blocking meets ids that have no target record behind them -- the
-  // ranked slice is capped, and the flat id list is not -- and still has to
-  // decide whether this user wants that kind of account blocked. Caching the
-  // map is what lets that decision be made from storage instead of a fetch.
-  const idTags = {};
-  const publishedTags = (payload && payload.idTags && typeof payload.idTags === 'object')
-    ? payload.idTags : {};
-  for (const id of norm.ids) {
-    if (publishedTags[id] != null) idTags[id] = tagOf(publishedTags[id]);
-  }
+/**
+ * The tail of every successful refresh, v3 or legacy: the ranked slice, the
+ * names off the published targets, the hot-patch map, the slim record, and
+ * the fan-out to the queue, the badge, the worker tab and the open tabs.
+ *
+ * Reads the database's three meta documents rather than the walk's return
+ * value, so it is the same function whether the list arrived through the v3
+ * walk, a legacy import or a forced refresh that fetched nothing -- and so a
+ * worker killed between the commit and this tail is repaired by simply
+ * running it again (touchSlim does exactly that).
+ *
+ * `opts`: payload (legacy only -- the file's own idNames map), changed (the
+ * walk's {chunks, bytes} of buckets replaced, for the record's chunk line),
+ * docIdOverrides (already sanitised; absent means the root's own).
+ */
+async function finishRefresh(settings, opts) {
+  const o = opts || {};
+  const root = await ListStore.getMeta('root');
+  if (!root) return { ok: false, error: T('sw_noBlocklistCached') };
+  const extras = (await ListStore.getMeta('extras')) || {};
+  const counts = (await ListStore.getMeta('counts')) || {};
 
-  const record = {
-    ids: norm.ids,
-    usernames: norm.usernames,
-    targets,
-    targetsAvailable,
-    idTags,
-    etag: res.headers.get('etag') || null,
-    fetchedAt: Date.now(),
-    source,
-    verified,
-    updatedAt: (payload && payload.updatedAt) || null,
-    count: norm.ids.length + norm.usernames.length
-  };
+  const rawTargets = Array.isArray(extras.targets) ? extras.targets : [];
+  const rankWeights = (o.payload && o.payload.rankWeights) || root.rankWeights || null;
+  const ranked = await rankTargetsFrom(rawTargets, extras.targetsAvailable, rankWeights,
+                                       root.updatedAt, settings);
+
+  // The slim record: what the pages print, and nothing a page would have to
+  // hold a million of. One definition, in list-sync.js beside the walk that
+  // fills the meta documents it is built from; `count` is ids plus usernames,
+  // manual rows included, which is the one number the popup's list line and
+  // the activity tile show. Source, etag and verified come off the root,
+  // which both the walk and the legacy import stamp with what answered.
+  const record = ListSync.buildRecord({ root, extras, counts }, ranked.targets,
+    ranked.targetsAvailable, { changed: o.changed, fetchedAt: Date.now() });
   await setLocal(KEYS.BLOCKLIST, record);
 
-  // Names off the published list.
+  // Names off the published targets.
   //
-  // Taken from payload.targets rather than from the `targets` built above,
-  // which is where this went wrong in the first place: that array is rebuilt
-  // field by field for the queue, and username and displayName were simply
-  // not among the fields copied -- so the Activity page, which looked for a
-  // name there, never found one and printed the id on its own.
+  // Taken from the published metadata rather than from the `targets` built
+  // above, which is where this went wrong in the first place: that array is
+  // rebuilt field by field for the queue, and username and displayName were
+  // simply not among the fields copied -- so the Activity page, which looked
+  // for a name there, never found one and printed the id on its own.
   //
   // Read unconditionally, too. `targets` is only populated when the user has
   // list blocking switched on; whether somebody wants the list WORKED THROUGH
   // has nothing to do with whether they should be able to read who an account
   // is once it turns up in their own history.
+  //
+  // ONLY the published targets (a couple of thousand at most), never the
+  // rows: the sightings map is capped at 4000 and a million listed names
+  // would churn it to nothing. A listed id that is not a target still prints
+  // with a name -- nameOfId and the GET_STATE join read it off its row.
   {
     const byPlatform = {};
-    for (const t of (Array.isArray(payload.targets) ? payload.targets : [])) {
+    for (const t of rawTargets) {
       if (!t || !t.id || (!t.username && !t.displayName)) continue;
       const plat = t.platform || 'facebook';
       (byPlatform[plat] = byPlatform[plat] || {})[String(t.id)] =
         { u: t.username || null, d: t.displayName || null };
     }
-    // The published id -> name map, which unlike `targets` covers EVERY listed
-    // id rather than the ranked slice. Merged under the per-target names above
-    // rather than over them: a target record is the moderator's published
-    // detail for that account, and where both know a name they agree anyway.
-    const published = (payload && payload.idNames && typeof payload.idNames === 'object')
-      ? payload.idNames : {};
+    // A legacy file may carry its own id -> name map, which unlike `targets`
+    // covers EVERY listed id rather than the ranked slice. Merged under the
+    // per-target names above rather than over them: a target record is the
+    // moderator's published detail for that account, and where both know a
+    // name they agree anyway. (A v3 list carries these names on the rows.)
+    const published = (o.payload && o.payload.idNames && typeof o.payload.idNames === 'object')
+      ? o.payload.idNames : {};
     for (const plat of Object.keys(published)) {
       const m = published[plat];
       if (!m || typeof m !== 'object') continue;
@@ -992,15 +1198,22 @@ async function refreshBlocklist(force) {
     for (const [plat, m] of Object.entries(byPlatform)) await rememberNames(plat, m);
   }
 
-  if (norm.docIdOverrides) await setLocal('docIdOverrides', norm.docIdOverrides);
-  await pruneQueueToList(record);
+  const overrides = o.docIdOverrides !== undefined
+    ? o.docIdOverrides
+    : (root.docIdOverrides ? sanitizeDocIdOverrides(root.docIdOverrides) : null);
+  if (overrides) await setLocal('docIdOverrides', overrides);
+  await pruneQueueToList();
   await seedServerTargets(record);
   await updateBadge();
   // A refresh is the moment work appears out of nowhere, so it is the moment
   // worth asking whether anybody is around to do it.
   await maybeOpenWorkTab('refresh').catch(() => {});
 
-  await broadcast(P.SW.BLOCKLIST_UPDATED, { count: record.count });
+  // The generation is what a tab compares: it moves only when rows, manual
+  // entries or extras actually changed, so a tab can keep its verdict cache
+  // across the refreshes that changed nothing.
+  await broadcast(P.SW.BLOCKLIST_UPDATED,
+    { count: record.count, updatedAt: record.updatedAt, generation: record.generation });
   return { ok: true, blocklist: record };
 }
 
@@ -1017,15 +1230,20 @@ async function refreshBlocklist(force) {
  * brief gap rather than a loss -- and erring toward NOT blocking is the right
  * direction for a mistake to fall.
  */
-async function pruneQueueToList(record) {
+async function pruneQueueToList() {
   return serialize(async () => {
     const q = await getLocal(KEYS.QUEUE, {});
-    const allowed = new Set(record.ids || []);
     let removed = 0;
     for (const platform of Object.keys(q)) {
-      const before = (q[platform] || []).length;
-      q[platform] = (q[platform] || []).filter(e => allowed.has(entryId(e)));
-      removed += before - q[platform].length;
+      const entries = q[platform] || [];
+      if (!entries.length) continue;
+      // Membership from the database, per platform with the '*' fallback for
+      // manual and legacy rows -- so a Facebook entry can no longer be kept
+      // alive by a Threads id that happens to share its digits.
+      // A queue is as long as it is; hasIds reads it in lookup-sized slices.
+      const keep = await ListStore.hasIds(listPlatform(platform) || '*', entries.map(entryId));
+      q[platform] = entries.filter(e => keep.has(entryId(e)));
+      removed += entries.length - q[platform].length;
     }
     if (removed) await setLocal(KEYS.QUEUE, q);
     return removed;
@@ -1152,10 +1370,89 @@ async function rememberNames(platform, incoming) {
   if (touched || pairs.length) await setLocal('idNames', map);
 }
 
-/** Whatever is known about one id, or null. */
+/**
+ * Rows for exactly these keys, in this order, null where the store has none.
+ *
+ * ListStore.getRows answers a key -> row map with the misses absent; this
+ * lays it back along the keys so a caller can .find(Boolean) or zip the
+ * answer against what it asked for.
+ */
+async function rowsFor(keys) {
+  if (!keys || !keys.length) return [];
+  const got = await ListStore.getRows(keys);
+  return keys.map(k => (got && got[k]) || null);
+}
+
+/**
+ * Whatever is known about one id, or null.
+ *
+ * The sightings map first, then the listed row itself: a v3 row carries the
+ * published username and display name, so an account the list names is
+ * never printed as a bare number merely because nobody here scrolled past
+ * it. The platform's own row wins over a '*' (manual or legacy) row.
+ */
 async function nameOfId(platform, id) {
   const map = await getLocal('idNames', {});
-  return map[nameKey(platform, id)] || null;
+  const known = map[nameKey(platform, id)];
+  if (known) return known;
+  const row = (await rowsFor([platform + ':' + id, '*:' + id])).find(Boolean);
+  return row && (row.u || row.d) ? { u: row.u || null, d: row.d || null } : null;
+}
+
+/**
+ * The published name and tag of every id a page is about to print.
+ *
+ * The slim record no longer carries an id map, and the sightings map only
+ * knows accounts somebody here scrolled past -- so the popup and the Activity
+ * page would print bare numbers for exactly the accounts the list nominated
+ * and this browser never saw. This joins, from the database, the ids those
+ * pages show: every queue entry, every history row that has no username of
+ * its own, and every alert. Bounded by what is on screen (the history is
+ * capped at 500 rows, the queue at what the list nominates), not by the list.
+ *
+ * Returns idNames with the rows laid OVER the stored sightings (a published
+ * name is the moderator's, and where both know one they agree anyway --
+ * either half a row lacks keeps the sighting's), under the same
+ * platform:id keys the pages already read, and idTags as a bare id -> tag
+ * map, which is the shape the pages read off the old record.
+ */
+async function joinListNames(idNames, on) {
+  const wanted = new Map();        // platform:id -> { platform, id }
+  const want = (platform, id) => {
+    platform = String(platform || ''); id = String(id || '');
+    if (!ID_RE.test(id) || (platform !== 'facebook' && platform !== 'threads')) return;
+    if (wanted.size < 500) wanted.set(platform + ':' + id, { platform, id });
+  };
+  const queue = on.queue || {};
+  for (const platform of Object.keys(queue)) {
+    for (const e of (queue[platform] || [])) want(platform, entryId(e));
+  }
+  for (const row of (on.blockLog || [])) if (row && !row.username) want(row.platform, row.id);
+  for (const key of Object.keys(on.alerts || {})) {
+    const i = key.indexOf(':');
+    if (i > 0) want(key.slice(0, i), key.slice(i + 1));
+  }
+  if (!wanted.size) return { idNames, idTags: {} };
+
+  // The platform's own row and the '*' row (manual or legacy) side by side;
+  // the platform's wins.
+  const keys = [];
+  for (const [k, w] of wanted) keys.push(k, '*:' + w.id);
+  const rows = await rowsFor(keys);
+  const names = Object.assign({}, idNames);
+  const idTags = {};
+  let i = 0;
+  for (const [k, w] of wanted) {
+    const row = rows[i] || rows[i + 1];
+    i += 2;
+    if (!row) continue;
+    if (row.t) idTags[w.id] = tagOf(row.t);
+    if (row.u || row.d) {
+      const was = names[k] || {};
+      names[k] = { u: row.u || was.u || null, d: row.d || was.d || null, at: was.at || 0 };
+    }
+  }
+  return { idNames: names, idTags };
 }
 
 function asEntry(e) {
@@ -2113,6 +2410,25 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         break;
       }
 
+      // Membership for the ids and handles on ONE page, from the database.
+      // Positives only: a key absent from the reply is a miss, so a feed
+      // where almost every author is clean answers in a few bytes. Over-cap
+      // requests are truncated rather than refused. Never the network -- see
+      // the privacy note at "Where the list comes from".
+      case P.SW.BLOCKLIST_LOOKUP: {
+        const platform = listPlatform(payload.platform);
+        if (!platform) { respond({ ok: false, error: 'unknown platform' }); break; }
+        const generation = ((await getLocal(KEYS.BLOCKLIST, null)) || {}).generation || 0;
+        const ids = (Array.isArray(payload.ids) ? payload.ids : []).slice(0, 500)
+          .map(String).filter(id => ID_RE.test(id));
+        const usernames = (Array.isArray(payload.usernames) ? payload.usernames : []).slice(0, 500)
+          .map(normUsername).filter(Boolean);
+        const hit = await ListStore.lookup({ platform, ids, usernames });
+        respond({ ok: true, generation,
+                  ids: (hit && hit.ids) || {}, usernames: (hit && hit.usernames) || {} });
+        break;
+      }
+
       case P.SW.REFRESH_NOW:
         respond(await refreshBlocklist(true));
         break;
@@ -2130,8 +2446,16 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
             getLocal('failures', {}),
             getLocal('idNames', {})
           ]);
+        // Names and tags for exactly the ids these pages are about to print,
+        // joined from the list database. Skipped for {lite: true} -- the
+        // 400 ms pollers behind "Block now" read the queue and nothing else,
+        // and fifty of them do not need fifty joins.
+        let joined = { idNames, idTags: {} };
+        if (payload.lite !== true) {
+          joined = await joinListNames(idNames, { queue, blockLog, alerts: await getLocal(ALERTS, {}) });
+        }
         respond({ ok: true, settings, blocklist, queue, done, stats, blockLog,
-          cooldowns, failures, idNames });
+          cooldowns, failures, idNames: joined.idNames, idTags: joined.idTags });
         break;
       }
 
@@ -2171,7 +2495,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
         const ids = payload.userInitiated
           ? payload.ids
-          : await filterByBlockTags(payload.ids, settings);
+          : await filterByBlockTags(payload.platform, payload.ids, settings);
         const queued = await serialize(() =>
           enqueue(payload.platform, ids, { warm, userInitiated: !!payload.userInitiated }));
         respond(queued);
@@ -2272,9 +2596,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         break;
 
       // Test hook: drive the list-prune directly. Harmless in production --
-      // it only ever removes queue entries.
+      // it only ever removes queue entries, and it reads the list database
+      // (which the harness seeds) rather than an ids payload.
       case 'sw:prune-test':
-        respond({ ok: true, removed: await pruneQueueToList({ ids: (payload && payload.ids) || [] }) });
+        respond({ ok: true, removed: await pruneQueueToList() });
         break;
 
       case P.SW.SUBMIT_REPORT:
@@ -2339,36 +2664,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
  */
 const POINTER_TTL_MS = 3600000;
 
-/**
- * Check a signed envelope against the key compiled into this build.
- *
- * Used for both documents the extension ACTS on without a person in the loop:
- * the pointer that says where reports go, and the blocklist that says whom to
- * block. Returns the payload on success and null on anything else -- and
- * "anything else" includes a build with no key, because a build that cannot
- * verify must not accept, not accept anyway.
- */
-async function verifyEnvelope(doc) {
-  const key = globalThis.CB_POINTER_KEY;
-  if (!key) return null;
-  if (!doc || typeof doc !== 'object' || !doc.payload || !doc.sig || doc.alg !== 'ed25519') {
-    return null;
-  }
-  const b64url = (v) => Uint8Array.from(
-    atob(String(v).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-  const body = new TextEncoder().encode(JSON.stringify(doc.payload));
-  try {
-    const pub = await crypto.subtle.importKey('raw', b64url(key),
-      { name: 'Ed25519' }, false, ['verify']);
-    const ok = await crypto.subtle.verify({ name: 'Ed25519' }, pub, b64url(doc.sig), body);
-    return ok ? doc.payload : null;
-  } catch (e) { return null; }
-}
-
-/** Does this look like a signed envelope, whatever it claims to hold? */
-function isEnvelope(doc) {
-  return !!(doc && typeof doc === 'object' && doc.payload && doc.sig && doc.alg);
-}
+// verifyEnvelope and isEnvelope live in envelope.js now: the pointer, the
+// legacy list and the v3 root are all checked by the one function against the
+// one compiled-in key, and list-sync.js needs it as much as this file does.
 
 /**
  * Verify and read a pointer document.
@@ -2395,9 +2693,14 @@ async function readPointer(url) {
   if (!Number.isFinite(issued) || Date.now() - issued > 30 * 86400000) return null;
 
   // Report hosts are PINNED: a valid signature still cannot send reports to a
-  // host this build has never heard of. List mirrors are not, because the list
-  // is itself signed and that signature is the control -- see lib/pointer.js
-  // on the server for the full argument. They must at least be https.
+  // host this build has never heard of. List bases are not -- neither the
+  // whole-file mirrors nor the v3 bases -- and the argument is the same for
+  // both: the list is itself signed (for v3 the root is, and every object
+  // under it is hash-bound to that root), so a base can be stale, hostile or
+  // somebody else's entirely and the worst it can do is fail to verify. See
+  // lib/pointer.js on the server for the full version. They must at least be
+  // https, and a v3 base must be the directory the root lives in, trailing
+  // slash included.
   const pinned = globalThis.CB_POINTER_HOSTS || [];
   const hosts = (payload.hosts || [])
     .map(h => String(h || '').trim())
@@ -2405,7 +2708,10 @@ async function readPointer(url) {
   const listMirrors = (payload.listMirrors || [])
     .map(u => String(u || '').trim())
     .filter(u => /^https:\/\//i.test(u));
-  return hosts.length ? { hosts, listMirrors } : null;
+  const v3Mirrors = (Array.isArray(payload.v3Mirrors) ? payload.v3Mirrors : [])
+    .map(u => String(u || '').trim())
+    .filter(u => /^https:\/\/.+\/blocklist\/v3\/$/i.test(u));
+  return hosts.length ? { hosts, listMirrors, v3Mirrors } : null;
 }
 
 /** Ask the mirrors, in order, until one verifies. */
@@ -2414,11 +2720,12 @@ async function refreshPointer() {
   for (const url of urls) {
     const found = await readPointer(url);
     if (found) {
-      await setLocal('backendHosts', { hosts: found.hosts, listMirrors: found.listMirrors, at: Date.now() });
+      await setLocal('backendHosts', { hosts: found.hosts, listMirrors: found.listMirrors,
+                                       v3Mirrors: found.v3Mirrors, at: Date.now() });
       return found.hosts;
     }
   }
-  await setLocal('backendHosts', { hosts: null, listMirrors: [], at: Date.now() });
+  await setLocal('backendHosts', { hosts: null, listMirrors: [], v3Mirrors: [], at: Date.now() });
   return null;
 }
 
@@ -2946,18 +3253,24 @@ async function reportStatus(q, force) {
   // here can any more.
   //
   //   BLOCKED  is membership of the published list, which this browser already
-  //            holds. It needs no network, no server and no account: someone
-  //            who is not signed in can still be told that an account is on
-  //            the list, and making them sign in to learn a published fact
-  //            would be absurd.
+  //            holds in its list database. It needs no network, no server and
+  //            no account: someone who is not signed in can still be told that
+  //            an account is on the list, and making them sign in to learn a
+  //            published fact would be absurd.
   //   PENDING  is what THIS browser reported and has not seen land. Local
   //            first; the server is asked only to refresh it, and only ever
   //            about our own pseudonym.
-  const listRec = await getLocal(KEYS.BLOCKLIST, null);
   const pid = String(q.profileId || '');
   const uname = normUsername(q.username);
-  const blocked = !!(listRec && (((listRec.ids || []).includes(pid)) ||
-                                 (uname && (listRec.usernames || []).includes(uname))));
+  // Exact id, normalised username, scoped to the platform with the '*'
+  // fallback -- the same lookup the tabs use, so the chip and the feed agree.
+  const listed = listPlatform(q.platform)
+    ? await ListStore.lookup({ platform: q.platform,
+                               ids: ID_RE.test(pid) ? [pid] : [],
+                               usernames: uname ? [uname] : [] })
+    : { ids: {}, usernames: {} };
+  const blocked = !!((listed && listed.ids && listed.ids[pid]) ||
+                     (uname && listed && listed.usernames && listed.usernames[uname]));
 
   const base = await apiBase();
   const reporter = reporterRef(q.platform, q.viewerId);
