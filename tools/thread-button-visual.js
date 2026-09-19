@@ -54,8 +54,15 @@ async function shot(c,s,f){const r=await c.send('Page.captureScreenshot',{format
         var row = b.parentElement;
         var labels = [];
         if (row) {
-          var svgs = row.querySelectorAll('svg[aria-label]');
-          for (var j = 0; j < svgs.length; j++) labels.push(svgs[j].getAttribute('aria-label'));
+          // Same three sources the content script reads (iconLabel in
+          // report-ui.js): Threads moved the label off aria-label in 2026-09.
+          var svgs = row.querySelectorAll('svg');
+          for (var j = 0; j < svgs.length; j++) {
+            var t = svgs[j].querySelector('title');
+            var lb = svgs[j].getAttribute('aria-label') || svgs[j].getAttribute('title') ||
+                     (t ? t.textContent : '');
+            if (lb && lb.trim()) labels.push(lb.trim());
+          }
         }
         rows.push({
           post: b.getAttribute('data-cloneblocker-post'),

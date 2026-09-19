@@ -32,11 +32,17 @@ const PROBE = `(function(){
     var r = c.getBoundingClientRect();
     if (r.height < 60) continue;
 
-    // Action-bar controls: svg[aria-label] is how Threads labels its icons.
+    // Action-bar controls. Threads labelled its icons with aria-label on the
+    // svg until 2026-09, then moved to a title attribute plus a <title>
+    // child; read all three, as report-ui.js does, or the bar reads as empty.
     var actions = [];
-    var svgs = c.querySelectorAll('svg[aria-label]');
+    var svgs = c.querySelectorAll('svg');
     for (var j = 0; j < svgs.length; j++) {
-      var lb = svgs[j].getAttribute('aria-label');
+      var tt = svgs[j].querySelector('title');
+      var lb = svgs[j].getAttribute('aria-label') || svgs[j].getAttribute('title') ||
+               (tt ? tt.textContent : '');
+      if (!lb || !lb.trim()) continue;
+      lb = lb.trim();
       var btn = svgs[j].closest('[role="button"],button,div[tabindex]');
       var b = (btn || svgs[j]).getBoundingClientRect();
       actions.push({

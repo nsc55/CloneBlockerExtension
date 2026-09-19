@@ -1088,8 +1088,41 @@
   // and a summary of the content.
   // ==========================================================================
   const MARK_ATTR = 'data-cloneblocker-report-btn';
-  const SHARE_LABELS = /^(share|send to|send)$/i;
-  const ACTION_LABELS = /^(like|reply|repost|share|send to|send)$/i;
+  // Vietnamese first: it is what this deployment's users see. The English is
+  // kept for accounts whose Meta UI language is English, and the shape pass
+  // below covers every other language.
+  const SHARE_LABELS = /^(chia sẻ|gửi|share|send to|send)$/i;
+  const ACTION_LABELS = /^(thích|trả lời|đăng lại|chia sẻ|gửi|like|reply|repost|share|send to|send)$/i;
+
+  /**
+   * The label of an icon, wherever Threads put it this month.
+   *
+   * Until September 2026 every action icon carried aria-label on the <svg>
+   * itself, and that attribute was the only place this file looked. Then the
+   * feed shipped with the label moved to a `title` attribute plus a <title>
+   * child -- `<svg role="img" title="Share"><title>Share</title>` -- and no
+   * aria-label at all. Both finders below queried `svg[aria-label]`, so each
+   * saw zero icons in every post and the button vanished from every post on
+   * every install, with nothing logged: no error, just no slot. Follow still
+   * uses aria-label, so the change was per component rather than site-wide;
+   * reading all three sources covers both, and whatever moves next.
+   */
+  function iconLabel(svg) {
+    const attr = svg.getAttribute('aria-label') || svg.getAttribute('title');
+    if (attr && attr.trim()) return attr.trim();
+    const t = svg.querySelector('title');
+    return t ? (t.textContent || '').trim() : '';
+  }
+
+  /** Every svg under `root` that has a label, with the label read once. */
+  function labelledIcons(root) {
+    const out = [];
+    for (const svg of root.querySelectorAll('svg')) {
+      const label = iconLabel(svg);
+      if (label) out.push({ svg, label });
+    }
+    return out;
+  }
 
   /** Pull the reportable facts out of a post container. */
   function extractPostContext(container) {
@@ -1177,9 +1210,7 @@
   }
 
   function findShareSlotByLabel(container) {
-    const svgs = container.querySelectorAll('svg[aria-label]');
-    for (const svg of svgs) {
-      const label = (svg.getAttribute('aria-label') || '').trim();
+    for (const { svg, label } of labelledIcons(container)) {
       if (!SHARE_LABELS.test(label)) continue;
       const btn = svg.closest('[role="button"],button,div[tabindex]');
       if (!btn) continue;
@@ -1192,8 +1223,8 @@
       const row = slot.parentElement;
       if (!row) continue;
       let siblingActions = 0;
-      for (const s of row.querySelectorAll('svg[aria-label]')) {
-        if (ACTION_LABELS.test((s.getAttribute('aria-label') || '').trim())) siblingActions++;
+      for (const sib of labelledIcons(row)) {
+        if (ACTION_LABELS.test(sib.label)) siblingActions++;
       }
       if (siblingActions >= 2) return slot;
     }
@@ -1215,7 +1246,7 @@
    */
   function findShareSlotByShape(container) {
     const rows = new Map();
-    for (const svg of container.querySelectorAll('svg[aria-label]')) {
+    for (const { svg } of labelledIcons(container)) {
       const btn = svg.closest('[role="button"],button,div[tabindex]');
       if (!btn) continue;
       const slot = btn.parentElement && btn.parentElement.children.length === 1
