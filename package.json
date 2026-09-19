@@ -1,6 +1,6 @@
 {
   "name": "cloneblocker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Chrome MV3 extension: report a clone once, and when it is approved every Clone Blocker user blocks that account on Facebook and Threads.",
   "license": "MIT",
   "private": true,

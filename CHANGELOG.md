@@ -8,6 +8,20 @@ The versions below are the extension's `manifest.json` version. Anything under
 
 ---
 
+## 1.1.1 — 19 September 2026
+
+### The report button is back on every Threads post
+
+- **Threads changed how it labels the icons under a post, and the button
+  disappeared with it.** The extension finds a post's action row by the
+  labels on the Like, Reply, Repost and Share icons, and Threads moved those
+  labels somewhere the extension was not looking. So it found no row, placed
+  no button, and said nothing — there was no error, just nothing to click.
+  It now reads the label from every place Threads has put it, and the button
+  sits after Share again on every post. The Vietnamese labels are matched
+  directly as well, rather than only through the language-neutral fallback.
+
+---
 ## 1.1.0 — 6 September 2026
 
 ### The list now scales to millions of entries
